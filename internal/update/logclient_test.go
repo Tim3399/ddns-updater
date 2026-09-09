@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/qdm12/ddns-updater/internal/update/mock_update"
@@ -36,13 +37,13 @@ func Test_LogClient(t *testing.T) {
 			},
 			requestBodyString: "request body",
 			requestLineRegex: "PUT http://127.0.0.1:[0-9]{0,5} | " +
-				"headers: Key1: value1,value 2; Key2: value 3 | " +
-				"body: request body",
+				"headers: Key1: value 1,value 2; Key2: value 3 | " +
+				"body: \\[REDACTED\\]",
 			responseStatusCode: http.StatusAccepted,
 			responseBodyString: "response body",
 			responseLineRegex: "202 Accepted | " +
-				"headers: Content-Length: 9; Content-Type: text/plain; charset=utf-8; Date: .+ | " +
-				"body: response body",
+				"headers: Content-Length: 13; Content-Type: text/plain; charset=utf-8; Date: .+ | " +
+				"body: \\[REDACTED\\]",
 		},
 		"simple GET": {
 			requestMethod:      http.MethodGet,
@@ -51,8 +52,8 @@ func Test_LogClient(t *testing.T) {
 			responseStatusCode: http.StatusOK,
 			responseBodyString: "response body",
 			responseLineRegex: "200 OK | " +
-				"headers: Date: .+; Content-Length: 13; Content-Type: text/plain; charset=utf-8 | " +
-				"body: response body",
+				"headers: Content-Length: 13; Content-Type: text/plain; charset=utf-8; Date: .+ | " +
+				"body: \\[REDACTED\\]",
 		},
 	}
 
@@ -63,7 +64,6 @@ func Test_LogClient(t *testing.T) {
 			ctrl := gomock.NewController(t)
 
 			handler := http.HandlerFunc(func(rw http.ResponseWriter, request *http.Request) {
-				// Check request matches the request we sent
 				assert.Equal(t, testCase.requestMethod, request.Method)
 				for key, expectedValues := range testCase.requetsHeaders {
 					values := request.Header[key]
@@ -79,9 +79,7 @@ func Test_LogClient(t *testing.T) {
 					assert.Equal(t, testCase.requestBodyString, string(b))
 				}
 
-				// Send the response
 				rw.WriteHeader(testCase.responseStatusCode)
-
 				if testCase.responseBodyNil {
 					return
 				}
@@ -89,6 +87,7 @@ func Test_LogClient(t *testing.T) {
 				require.NoError(t, err)
 			})
 			server := httptest.NewServer(handler)
+			defer server.Close()
 
 			client := server.Client()
 
@@ -103,11 +102,9 @@ func Test_LogClient(t *testing.T) {
 				})
 
 			logClient := makeLogClient(client, logger)
-
 			assert.Same(t, logClient, client)
 
 			ctx := context.Background()
-
 			var requestBody io.Reader
 			if !testCase.requestBodyNil {
 				requestBody = bytes.NewBufferString(testCase.requestBodyString)
@@ -119,10 +116,8 @@ func Test_LogClient(t *testing.T) {
 
 			response, err := logClient.Do(request)
 			require.NoError(t, err)
-
 			defer require.NoError(t, response.Body.Close())
 
-			// Ensure response received is as expected
 			assert.Equal(t, testCase.responseStatusCode, response.StatusCode)
 			if testCase.responseBodyNil {
 				assert.Nil(t, response.Body)
@@ -133,4 +128,46 @@ func Test_LogClient(t *testing.T) {
 			assert.Equal(t, testCase.responseBodyString, string(b))
 		})
 	}
+}
+
+func TestRequestToStringRedactsSecrets(t *testing.T) {
+	t.Parallel()
+
+	request, err := http.NewRequest(http.MethodPost,
+		"https://user:password@example.com/path?token=secret-token&api_key=secret-key&safe=value",
+		strings.NewReader("sensitive request body"))
+	require.NoError(t, err)
+	request.Header.Set("Authorization", "Bearer super-secret")
+	request.Header.Set("Cookie", "session=session-secret")
+	request.Header.Set("X-Api-Key", "header-secret")
+
+	line := requestToString(request)
+
+	for _, secret := range []string{
+		"user", "password", "secret-token", "secret-key",
+		"sensitive request body", "super-secret", "session-secret", "header-secret",
+	} {
+		assert.NotContains(t, line, secret)
+	}
+	assert.Contains(t, line, "safe=value")
+	assert.Contains(t, line, redactedValue)
+}
+
+func TestResponseToStringRedactsSecrets(t *testing.T) {
+	t.Parallel()
+
+	response := &http.Response{
+		Status: "200 OK",
+		Header: http.Header{
+			"Set-Cookie": []string{"session=response-secret"},
+			"X-Test":     []string{"safe"},
+		},
+		Body: io.NopCloser(strings.NewReader("sensitive response body")),
+	}
+
+	line := responseToString(response)
+	assert.NotContains(t, line, "response-secret")
+	assert.NotContains(t, line, "sensitive response body")
+	assert.Contains(t, line, "X-Test: safe")
+	assert.Contains(t, line, redactedValue)
 }
