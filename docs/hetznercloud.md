@@ -11,10 +11,10 @@ This provider uses the Hetzner Cloud API `https://api.hetzner.cloud/v1/` which i
   "settings": [
     {
       "provider": "hetznercloud",
-      "domain": "example.com",
+      "domain": "home.example.com",
       "token": "yourtoken",
       "ip_version": "ipv4",
-      "ipv6_suffix": ""
+      "ttl": 60
     }
   ]
 }
@@ -30,3 +30,24 @@ This provider uses the Hetzner Cloud API `https://api.hetzner.cloud/v1/` which i
 - `"ip_version"` can be `ipv4` (A records), or `ipv6` (AAAA records) or `ipv4 or ipv6` (update one of the two, depending on the public ip found). It defaults to `ipv4 or ipv6`.
 - `"ipv6_suffix"` is the IPv6 interface identifier suffix to use. It can be for example `0:0:0:0:72ad:8fbb:a54e:bedd/64`. If left empty, it defaults to no suffix and the raw temporary IPv6 address of the machine is used in the record updating. You might want to set this to use your permanent IPv6 address instead of your temporary IPv6 address.
 - `"ttl"` time to live for the DNS record in seconds. It is only used to add a record to the rrset, and is not used to update an existing record. If left empty, it defaults to the existing zone TTL.
+
+## RRSet ownership
+
+Hetzner Cloud models records as RRSets. When an existing A or AAAA RRSet needs to
+change, ddns-updater uses Hetzner's `set_records` action and replaces the values
+of that RRSet with the single dynamic IP address.
+
+For that reason, use a dedicated hostname for DDNS, for example:
+
+```text
+home.example.com A <dynamic public IPv4>
+```
+
+Other services can point to that hostname using CNAME records.
+
+Do not use the same managed A/AAAA RRSet for additional round-robin or static
+addresses that must be preserved, because those values will be replaced on the
+next DDNS update.
+
+For least privilege, use a dedicated Hetzner project/API token for DNS
+infrastructure instead of reusing a broader infrastructure credential.
