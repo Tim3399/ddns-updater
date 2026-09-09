@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/netip"
+	"strconv"
 	"testing"
 
 	"github.com/qdm12/ddns-updater/pkg/publicip/ipversion"
@@ -50,7 +51,7 @@ func TestUpdateReportsHetznerCloudTransientAPIErrors(t *testing.T) {
 			_, err := provider.Update(context.Background(), newProviderTestClient(t, handler),
 				netip.MustParseAddr("203.0.113.2"))
 			require.Error(t, err)
-			assert.Contains(t, err.Error(), http.StatusText(testCase.statusCode))
+			assert.Contains(t, err.Error(), strconv.Itoa(testCase.statusCode))
 			assert.Contains(t, err.Error(), testCase.message)
 		})
 	}
