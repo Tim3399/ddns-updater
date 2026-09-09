@@ -61,7 +61,7 @@ func TestUpdateExistingHetznerCloudRRSet(t *testing.T) {
 				switch {
 				case r.Method == http.MethodGet && r.URL.Path == getPath:
 					w.Header().Set("Content-Type", "application/json")
-					_, _ = fmt.Fprintf(w, `{"rrset":{"records":[{"value":%q}]}}`, testCase.oldIP)
+					_, _ = fmt.Fprintf(w, "{\"rrset\":{\"records\":[{\"value\":%q}]}}", testCase.oldIP)
 				case r.Method == http.MethodPost && r.URL.Path == setPath:
 					postCount++
 					var request struct {
@@ -71,7 +71,7 @@ func TestUpdateExistingHetznerCloudRRSet(t *testing.T) {
 					require.Len(t, request.Records, 1)
 					assert.Equal(t, testCase.newIP, request.Records[0].Value)
 					w.WriteHeader(http.StatusCreated)
-					_, _ = w.Write([]byte(`{"action":{"id":42,"status":"success"}}`))
+					_, _ = w.Write([]byte("{\"action\":{\"id\":42,\"status\":\"success\"}}"))
 				default:
 					http.Error(w, "unexpected route", http.StatusNotFound)
 				}
@@ -102,7 +102,7 @@ func TestUpdateSkipsUpToDateHetznerCloudRRSet(t *testing.T) {
 		requests++
 		assert.Equal(t, http.MethodGet, r.Method)
 		assert.Equal(t, "/v1/zones/example.com/rrsets/home/A", r.URL.Path)
-		_, _ = w.Write([]byte(`{"rrset":{"records":[{"value":"203.0.113.2"}]}}`))
+		_, _ = w.Write([]byte("{\"rrset\":{\"records\":[{\"value\":\"203.0.113.2\"}]}}"))
 	})
 
 	provider := &Provider{
@@ -143,7 +143,7 @@ func TestUpdateCreatesMissingHetznerCloudRRSet(t *testing.T) {
 			require.Len(t, request.Records, 1)
 			assert.Equal(t, "203.0.113.2", request.Records[0].Value)
 			w.WriteHeader(http.StatusCreated)
-			_, _ = w.Write([]byte(`{"action":{"id":42,"status":"success"}}`))
+			_, _ = w.Write([]byte("{\"action\":{\"id\":42,\"status\":\"success\"}}"))
 		default:
 			http.Error(w, "unexpected route", http.StatusNotFound)
 		}
@@ -169,7 +169,7 @@ func TestUpdateReportsHetznerCloudAPIError(t *testing.T) {
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
-		_, _ = w.Write([]byte(`{"error":{"code":"unauthorized","message":"invalid token"}}`))
+		_, _ = w.Write([]byte("{\"error\":{\"code\":\"unauthorized\",\"message\":\"invalid token\"}}"))
 	})
 
 	provider := &Provider{
