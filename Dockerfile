@@ -1,6 +1,6 @@
 ARG BUILDPLATFORM=linux/amd64
 ARG ALPINE_VERSION=3.23
-ARG GO_VERSION=1.26
+ARG GO_VERSION=1.26.6
 ARG XCPUTRANSLATE_VERSION=v0.9.0
 ARG GOLANGCI_LINT_VERSION=v2.11.4
 ARG MOCKGEN_VERSION=v0.6.0
@@ -73,7 +73,6 @@ WORKDIR /updater
 ENTRYPOINT ["/updater/ddns-updater"]
 COPY --from=build --chown=${UID}:${GID} /tmp/data /updater/data
 ENV \
-    # Core
     CONFIG= \
     PERIOD=5m \
     UPDATE_COOLDOWN_PERIOD=5m \
@@ -88,20 +87,16 @@ ENV \
     CONFIG_FILEPATH=/updater/data/config.json \
     RESOLVER_ADDRESS= \
     RESOLVER_TIMEOUT=5s \
-    # Web UI
     SERVER_ENABLED=yes \
     LISTENING_ADDRESS=:8000 \
     ROOT_URL=/ \
-    # Backup
     BACKUP_PERIOD=0 \
     BACKUP_DIRECTORY=/updater/data \
-    # Other
     LOG_LEVEL=info \
     LOG_CALLER=hidden \
     SHOUTRRR_ADDRESSES= \
     SHOUTRRR_DEFAULT_TITLE="DDNS Updater" \
     TZ= \
-    # UMASK left empty so it dynamically defaults to the OS current umask
     UMASK= \
     HEALTH_SERVER_ADDRESS=127.0.0.1:9999 \
     HEALTH_HEALTHCHECKSIO_BASE_URL=https://hc-ping.com \
