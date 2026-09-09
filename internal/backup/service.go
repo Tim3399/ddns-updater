@@ -35,7 +35,7 @@ func (s *Service) String() string {
 }
 
 func makeZipFileName() string {
-	return "ddns-updater-backup-" + strconv.Itoa(int(time.Now().UnixNano())) + ".zip"
+	return backupFilePrefix + strconv.Itoa(int(time.Now().UnixNano())) + ".zip"
 }
 
 func (s *Service) Start(ctx context.Context) (runError <-chan error, startErr error) {
@@ -79,15 +79,20 @@ func run(ready chan<- struct{}, runError chan<- error, stopCh <-chan struct{},
 			_ = timer.Stop()
 			return
 		}
-		err := zipFiles(
-			filepath.Join(outputDir, makeZipFileName()),
-			filepath.Join(dataDir, "config.json"),
-			filepath.Join(dataDir, "updates.json"),
-		)
+
+		inputFiles := backupInputFiles(dataDir, backupIncludesConfig())
+		err := zipFiles(filepath.Join(outputDir, makeZipFileName()), inputFiles...)
 		if err != nil {
 			runError <- err
 			return
 		}
+
+		err = pruneBackups(outputDir, backupKeepCount())
+		if err != nil {
+			runError <- err
+			return
+		}
+
 		timer.Reset(backupPeriod)
 	}
 }
