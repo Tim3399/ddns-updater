@@ -1,0 +1,39 @@
+name: ddns-updater
+
+services:
+  ddns-updater:
+    image: ${DDNS_IMAGE:?Set DDNS_IMAGE to an immutable image reference, ideally @sha256:...}
+    container_name: ddns-updater
+    restart: unless-stopped
+    init: true
+    user: "1000:1000"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - ./data:/updater/data
+      - ./secrets/config.json:/run/secrets/ddns-config.json:ro
+    environment:
+      CONFIG: ""
+      CONFIG_FILEPATH: /run/secrets/ddns-config.json
+      DATADIR: /updater/data
+      UMASK: "0077"
+
+      SERVER_ENABLED: "no"
+      PERIOD: ${PERIOD:-5m}
+      UPDATE_COOLDOWN_PERIOD: ${UPDATE_COOLDOWN_PERIOD:-5m}
+
+      PUBLICIP_FETCHERS: http
+      PUBLICIP_HTTP_PROVIDERS: ${PUBLICIP_HTTP_PROVIDERS:-ipify,icanhazip,nnev}
+      PUBLICIPV4_HTTP_PROVIDERS: ${PUBLICIPV4_HTTP_PROVIDERS:-ipify,icanhazip,nnev}
+      PUBLICIPV6_HTTP_PROVIDERS: ${PUBLICIPV6_HTTP_PROVIDERS:-ipify,icanhazip,nnev}
+      HTTP_TIMEOUT: ${HTTP_TIMEOUT:-10s}
+
+      BACKUP_PERIOD: "0"
+      LOG_LEVEL: info
+      LOG_CALLER: hidden
+
+      HEALTH_SERVER_ADDRESS: 127.0.0.1:9999
+    stop_grace_period: 10s
