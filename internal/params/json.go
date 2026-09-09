@@ -67,7 +67,7 @@ func (r *Reader) getProvidersFromFile(filePath string) (
 		}
 		return nil, nil, err
 	}
-	r.logger.Debug("config read: " + string(bytes))
+	r.logger.Debug("JSON config read successfully")
 
 	return extractAllSettings(bytes)
 }
@@ -82,7 +82,7 @@ func (r *Reader) getProvidersFromEnv(filePath string) (
 		return nil, nil, nil
 	}
 	r.logger.Info("reading JSON config from environment variable CONFIG")
-	r.logger.Debug("config read: " + s)
+	r.logger.Debug("JSON config read successfully")
 
 	b := []byte(s)
 
