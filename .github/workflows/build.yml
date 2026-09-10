@@ -39,7 +39,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: reviewdog/action-misspell@d6429416b12b09b4e2768307d53bef58d172e962 # v1.27.0
+      - uses: reviewdog/action-misspell@ba7ac4030fa6812f8c8b2d4e516af8bc99553c32 # v1.28.0
         with:
           locale: "US"
           level: error
@@ -139,7 +139,7 @@ jobs:
 
       - name: Short commit
         id: shortcommit
-        run: echo "::set-output name=value::$(git rev-parse --short HEAD)"
+        run: echo "value=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Build and push final image
         uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
