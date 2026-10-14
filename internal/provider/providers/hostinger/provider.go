@@ -119,6 +119,11 @@ func (p *Provider) setHeaders(request *http.Request) {
 	headers.SetAuthBearer(request, p.token)
 }
 
+// TTL returns the record TTL in seconds.
+func (p *Provider) TTL() (ttl *uint32) {
+	return &p.ttl
+}
+
 func (p *Provider) Update(ctx context.Context, client *http.Client, ip netip.Addr) (newIP netip.Addr, err error) {
 	type recordContent struct {
 		Content string `json:"content"`

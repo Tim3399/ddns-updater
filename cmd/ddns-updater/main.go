@@ -211,7 +211,8 @@ func _main(ctx context.Context, reader *reader.Reader, args []string, logger log
 	updaterService := update.NewService(db, updater, ipGetter, config.Update.Period,
 		config.Update.Cooldown, logger, resolver, timeNow, hioClient)
 
-	healthServer, err := createHealthServer(db, resolver, logger, *config.Health.ServerAddress)
+	healthServer, err := createHealthServer(db, resolver, logger,
+		*config.Health.ServerAddress, timeNow)
 	if err != nil {
 		return fmt.Errorf("creating health server: %w", err)
 	}
@@ -359,13 +360,13 @@ func exitHealthchecksio(hioClient *healthchecksio.Client,
 
 //nolint:ireturn
 func createHealthServer(db health.AllSelecter, resolver health.LookupIPer,
-	logger log.LoggerInterface, serverAddress string) (
+	logger log.LoggerInterface, serverAddress string, timeNow func() time.Time) (
 	healthServer goservices.Service, err error,
 ) {
 	if serverAddress == "" {
 		return noop.New("healthcheck server"), nil
 	}
-	isHealthy := health.MakeIsHealthy(db, resolver)
+	isHealthy := health.MakeIsHealthy(db, resolver, timeNow)
 	healthLogger := logger.New(log.SetComponent("healthcheck server"))
 	return health.NewServer(serverAddress, healthLogger, isHealthy)
 }
