@@ -15,12 +15,20 @@ type Paths struct {
 	DataDir       *string
 	Config        *string
 	ConfigPersist *bool
-
-	environmentConfig bool
 	// Umask is the custom umask to use for the system, if different than zero.
 	// If it is set to zero, the system umask is unchanged.
 	// It cannot be nil in the internal state.
 	Umask *fs.FileMode
+
+	// environmentConfig is true if the CONFIG environment variable is set.
+	environmentConfig bool
+}
+
+// configFileHasSettings reports whether the config file holds the provider
+// settings. This is always the case when the settings are read from the file,
+// and only the case with CONFIG_PERSIST enabled when they come from CONFIG.
+func (p Paths) configFileHasSettings() bool {
+	return !p.environmentConfig || *p.ConfigPersist
 }
 
 func (p *Paths) setDefaults() {
@@ -57,7 +65,7 @@ func (p *Paths) read(reader *reader.Reader) (err error) {
 	p.Config = reader.Get("CONFIG_FILEPATH")
 	p.ConfigPersist, err = reader.BoolPtr("CONFIG_PERSIST")
 	if err != nil {
-		return fmt.Errorf("parse CONFIG_PERSIST: %w", err)
+		return err
 	}
 	environmentConfig := reader.Get("CONFIG")
 	p.environmentConfig = environmentConfig != nil && *environmentConfig != ""

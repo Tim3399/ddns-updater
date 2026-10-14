@@ -3,7 +3,6 @@ package config
 import (
 	"errors"
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/qdm12/gosettings"
@@ -11,7 +10,7 @@ import (
 	"github.com/qdm12/gotree"
 )
 
-var errBackupKeepNegative = errors.New("backup keep count must be zero or positive")
+var ErrBackupKeepNegative = errors.New("backup keep count is negative")
 
 type Backup struct {
 	Period        *time.Duration
@@ -29,7 +28,7 @@ func (b *Backup) setDefaults(includeConfig bool) {
 
 func (b Backup) Validate() (err error) {
 	if *b.Keep < 0 {
-		return fmt.Errorf("%w: %d", errBackupKeepNegative, *b.Keep)
+		return fmt.Errorf("%w: %d", ErrBackupKeepNegative, *b.Keep)
 	}
 	return nil
 }
@@ -63,15 +62,8 @@ func (b *Backup) read(reader *reader.Reader) (err error) {
 	b.Directory = reader.Get("BACKUP_DIRECTORY")
 	b.IncludeConfig, err = reader.BoolPtr("BACKUP_INCLUDE_CONFIG")
 	if err != nil {
-		return fmt.Errorf("parse BACKUP_INCLUDE_CONFIG: %w", err)
+		return err
 	}
-	keepString := reader.String("BACKUP_KEEP")
-	if keepString != "" {
-		keep, parseErr := strconv.Atoi(keepString)
-		if parseErr != nil {
-			return fmt.Errorf("parse BACKUP_KEEP: %w", parseErr)
-		}
-		b.Keep = &keep
-	}
-	return nil
+	b.Keep, err = reader.IntPtr("BACKUP_KEEP")
+	return err
 }

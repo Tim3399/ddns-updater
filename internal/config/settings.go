@@ -8,7 +8,7 @@ import (
 	"github.com/qdm12/gotree"
 )
 
-var errConfigBackupIncompatible = errors.New(
+var ErrConfigBackupIncompatible = errors.New(
 	"BACKUP_INCLUDE_CONFIG cannot be enabled when CONFIG is set and CONFIG_PERSIST is false")
 
 type Config struct {
@@ -32,15 +32,14 @@ func (c *Config) SetDefaults() {
 	c.Server.setDefaults()
 	c.Health.SetDefaults()
 	c.Paths.setDefaults()
-	includeConfig := !c.Paths.environmentConfig || *c.Paths.ConfigPersist
-	c.Backup.setDefaults(includeConfig)
+	c.Backup.setDefaults(c.Paths.configFileHasSettings())
 	c.Logger.setDefaults()
 	c.Shoutrrr.setDefaults()
 }
 
 func (c Config) Validate() (err error) {
-	if c.Paths.environmentConfig && !*c.Paths.ConfigPersist && *c.Backup.IncludeConfig {
-		return errConfigBackupIncompatible
+	if *c.Backup.IncludeConfig && !c.Paths.configFileHasSettings() {
+		return ErrConfigBackupIncompatible
 	}
 	type validator interface {
 		Validate() (err error)

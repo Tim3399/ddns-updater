@@ -57,5 +57,5 @@ func TestPathsReadRejectsInvalidConfigPersist(t *testing.T) {
 	var paths Paths
 	err := paths.read(settingsreader.New(settingsreader.Settings{}))
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "parse CONFIG_PERSIST")
+	assert.Contains(t, err.Error(), "CONFIG_PERSIST")
 }

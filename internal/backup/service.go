@@ -7,7 +7,11 @@ import (
 	"time"
 )
 
-const backupFilePrefix = "ddns-updater-backup-"
+const (
+	backupFilePrefix   = "ddns-updater-backup-"
+	updatesArchiveName = "updates.json"
+	configArchiveName  = "config.json"
+)
 
 type Options struct {
 	ConfigFilepath string
@@ -29,21 +33,14 @@ type Service struct {
 }
 
 func New(backupPeriod time.Duration,
-	dataDir, outputDir string, logger Logger, options ...Options,
+	dataDir, outputDir string, logger Logger, options Options,
 ) *Service {
-	backupOptions := Options{
-		ConfigFilepath: filepath.Join(dataDir, "config.json"),
-		IncludeConfig:  true,
-	}
-	if len(options) > 0 {
-		backupOptions = options[0]
-	}
 	return &Service{
 		logger:       logger,
 		backupPeriod: backupPeriod,
 		dataDir:      dataDir,
 		outputDir:    outputDir,
-		options:      backupOptions,
+		options:      options,
 	}
 }
 
@@ -97,13 +94,13 @@ func run(ready chan<- struct{}, runError chan<- error, stopCh <-chan struct{},
 			return
 		}
 		files := []archiveFile{{
-			filepath: filepath.Join(dataDir, "updates.json"),
-			name:     "updates.json",
+			filepath: filepath.Join(dataDir, updatesArchiveName),
+			name:     updatesArchiveName,
 		}}
 		if options.IncludeConfig {
 			files = append(files, archiveFile{
 				filepath: options.ConfigFilepath,
-				name:     "config.json",
+				name:     configArchiveName,
 			})
 		}
 		err := zipArchive(filepath.Join(outputDir, makeZipFileName()), files)

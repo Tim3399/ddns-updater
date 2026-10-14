@@ -43,13 +43,9 @@ func fetch(ctx context.Context, client *http.Client, url string,
 	switch response.StatusCode {
 	case http.StatusOK:
 	case http.StatusForbidden, http.StatusTooManyRequests:
-		return netip.Addr{}, fmt.Errorf("%w: %d (%s)", ErrBanned,
-			response.StatusCode, bodyToSingleLine(
-				io.LimitReader(response.Body, maxErrorResponseBytes)))
+		return netip.Addr{}, makeStatusError(ErrBanned, response)
 	default:
-		return netip.Addr{}, fmt.Errorf("%w: %d (%s)", ErrHTTPStatus,
-			response.StatusCode, bodyToSingleLine(
-				io.LimitReader(response.Body, maxErrorResponseBytes)))
+		return netip.Addr{}, makeStatusError(ErrHTTPStatus, response)
 	}
 
 	b, err := io.ReadAll(io.LimitReader(response.Body, maxPublicIPResponseBytes+1))
@@ -105,6 +101,13 @@ func fetch(ctx context.Context, client *http.Client, url string,
 	default:
 		panic(fmt.Sprintf("IP version %q is not supported", version))
 	}
+}
+
+// makeStatusError wraps baseErr with the response status code and
+// the beginning of the response body.
+func makeStatusError(baseErr error, response *http.Response) error {
+	body := bodyToSingleLine(io.LimitReader(response.Body, maxErrorResponseBytes))
+	return fmt.Errorf("%w: %d (%s)", baseErr, response.StatusCode, body)
 }
 
 func bodyToSingleLine(body io.Reader) (s string) {

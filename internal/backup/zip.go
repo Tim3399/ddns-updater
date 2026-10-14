@@ -13,14 +13,6 @@ import (
 
 const archiveCommentPrefix = "ddns-updater:v1:"
 
-func zipFiles(outputFilepath string, inputFilepaths ...string) error {
-	files := make([]archiveFile, len(inputFilepaths))
-	for i, inputFilepath := range inputFilepaths {
-		files[i] = archiveFile{filepath: inputFilepath, name: filepath.Base(inputFilepath)}
-	}
-	return zipArchive(outputFilepath, files)
-}
-
 type archiveFile struct {
 	filepath string
 	name     string
@@ -46,8 +38,9 @@ func zipArchive(outputFilepath string, files []archiveFile) (err error) {
 		archiveNames[i] = file.name
 	}
 	sort.Strings(archiveNames)
-	if err = w.SetComment(archiveCommentPrefix + strings.Join(archiveNames, ",")); err != nil {
-		return closeFailedArchive(w, f, fmt.Errorf("set ZIP comment: %w", err))
+	err = w.SetComment(archiveCommentPrefix + strings.Join(archiveNames, ","))
+	if err != nil {
+		return closeFailedArchive(w, f, fmt.Errorf("setting ZIP comment: %w", err))
 	}
 	for _, file := range files {
 		err = addFile(w, file.filepath, file.name)
@@ -55,19 +48,23 @@ func zipArchive(outputFilepath string, files []archiveFile) (err error) {
 			return closeFailedArchive(w, f, err)
 		}
 	}
-	if err = w.Close(); err != nil {
+	err = w.Close()
+	if err != nil {
 		_ = f.Close()
-		return fmt.Errorf("close ZIP writer: %w", err)
+		return fmt.Errorf("closing ZIP writer: %w", err)
 	}
-	if err = f.Sync(); err != nil {
+	err = f.Sync()
+	if err != nil {
 		_ = f.Close()
-		return fmt.Errorf("sync ZIP file: %w", err)
+		return fmt.Errorf("syncing ZIP file: %w", err)
 	}
-	if err = f.Close(); err != nil {
-		return fmt.Errorf("close ZIP file: %w", err)
+	err = f.Close()
+	if err != nil {
+		return fmt.Errorf("closing ZIP file: %w", err)
 	}
-	if err = os.Rename(temporaryFilepath, outputFilepath); err != nil {
-		return fmt.Errorf("publish ZIP file: %w", err)
+	err = os.Rename(temporaryFilepath, outputFilepath)
+	if err != nil {
+		return fmt.Errorf("renaming ZIP file: %w", err)
 	}
 	return nil
 }
@@ -75,11 +72,11 @@ func zipArchive(outputFilepath string, files []archiveFile) (err error) {
 func closeFailedArchive(writer *zip.Writer, file *os.File, archiveErr error) error {
 	zipCloseErr := writer.Close()
 	if zipCloseErr != nil {
-		zipCloseErr = fmt.Errorf("close ZIP writer: %w", zipCloseErr)
+		zipCloseErr = fmt.Errorf("closing ZIP writer: %w", zipCloseErr)
 	}
 	fileCloseErr := file.Close()
 	if fileCloseErr != nil {
-		fileCloseErr = fmt.Errorf("close ZIP file: %w", fileCloseErr)
+		fileCloseErr = fmt.Errorf("closing ZIP file: %w", fileCloseErr)
 	}
 	return errors.Join(archiveErr, zipCloseErr, fileCloseErr)
 }
@@ -89,30 +86,26 @@ func addFile(w *zip.Writer, filepath, archiveName string) (err error) {
 	if err != nil {
 		return err
 	}
+	defer func() {
+		closeErr := f.Close()
+		if err == nil && closeErr != nil {
+			err = fmt.Errorf("closing input file: %w", closeErr)
+		}
+	}()
 	info, err := f.Stat()
 	if err != nil {
-		_ = f.Close()
 		return err
 	}
 	header, err := zip.FileInfoHeader(info)
 	if err != nil {
-		_ = f.Close()
 		return err
 	}
 	header.Name = archiveName
 	header.Method = zip.Deflate
 	ioWriter, err := w.CreateHeader(header)
 	if err != nil {
-		_ = f.Close()
 		return err
 	}
-	_, copyErr := io.Copy(ioWriter, f)
-	closeErr := f.Close()
-	if copyErr != nil {
-		return copyErr
-	}
-	if closeErr != nil {
-		return fmt.Errorf("close input file: %w", closeErr)
-	}
-	return nil
+	_, err = io.Copy(ioWriter, f)
+	return err
 }

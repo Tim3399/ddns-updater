@@ -17,7 +17,7 @@ func TestBackupReadRejectsInvalidKeep(t *testing.T) {
 	var backup Backup
 	err := backup.read(settingsreader.New(settingsreader.Settings{}))
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "parse BACKUP_KEEP")
+	assert.Contains(t, err.Error(), "BACKUP_KEEP")
 }
 
 func TestBackupReadRejectsInvalidIncludeConfig(t *testing.T) {
@@ -29,7 +29,7 @@ func TestBackupReadRejectsInvalidIncludeConfig(t *testing.T) {
 	var backup Backup
 	err := backup.read(settingsreader.New(settingsreader.Settings{}))
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "parse BACKUP_INCLUDE_CONFIG")
+	assert.Contains(t, err.Error(), "BACKUP_INCLUDE_CONFIG")
 }
 
 func TestConfigPolicyDefaults(t *testing.T) {
@@ -91,6 +91,5 @@ func TestBackupValidateRejectsNegativeKeep(t *testing.T) {
 	backup := Backup{Keep: new(-1)}
 	backup.setDefaults(true)
 	err := backup.Validate()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "must be zero or positive")
+	assert.ErrorIs(t, err, ErrBackupKeepNegative)
 }

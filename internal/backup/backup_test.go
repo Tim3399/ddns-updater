@@ -12,6 +12,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// zipFiles archives each input file under its base name.
+func zipFiles(outputFilepath string, inputFilepaths ...string) error {
+	files := make([]archiveFile, len(inputFilepaths))
+	for i, inputFilepath := range inputFilepaths {
+		files[i] = archiveFile{filepath: inputFilepath, name: filepath.Base(inputFilepath)}
+	}
+	return zipArchive(outputFilepath, files)
+}
+
 func TestZipFilesPublishesOnlyCompleteArchives(t *testing.T) {
 	t.Parallel()
 
@@ -106,7 +115,7 @@ func TestValidZipRejectsOversizedArchive(t *testing.T) {
 
 	path := filepath.Join(t.TempDir(), backupFilePrefix+"1000000000000000001.zip")
 	require.NoError(t, writeValidationZip(path, int64(maxRetentionArchiveSize)+1))
-	assert.False(t, validZip(path))
+	assert.False(t, isCompleteBackup(path))
 	require.NoError(t, pruneBackups(filepath.Dir(path), 1))
 	_, err := os.Stat(path)
 	assert.NoError(t, err, "oversized archives are preserved but excluded from retention")
@@ -130,7 +139,7 @@ func TestValidZipChecksCRC(t *testing.T) {
 	//nolint:gosec
 	require.NoError(t, os.WriteFile(path, content, 0o600))
 
-	assert.False(t, validZip(path))
+	assert.False(t, isCompleteBackup(path))
 }
 
 func TestPruneAfterFailedBackupPreservesExistingArchives(t *testing.T) {
