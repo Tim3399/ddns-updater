@@ -1,11 +1,15 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/qdm12/gosettings/reader"
 	"github.com/qdm12/gotree"
 )
+
+var errConfigBackupIncompatible = errors.New(
+	"BACKUP_INCLUDE_CONFIG cannot be enabled when CONFIG is set and CONFIG_PERSIST is false")
 
 type Config struct {
 	Client   Client
@@ -28,12 +32,16 @@ func (c *Config) SetDefaults() {
 	c.Server.setDefaults()
 	c.Health.SetDefaults()
 	c.Paths.setDefaults()
-	c.Backup.setDefaults()
+	includeConfig := !c.Paths.environmentConfig || *c.Paths.ConfigPersist
+	c.Backup.setDefaults(includeConfig)
 	c.Logger.setDefaults()
 	c.Shoutrrr.setDefaults()
 }
 
 func (c Config) Validate() (err error) {
+	if c.Paths.environmentConfig && !*c.Paths.ConfigPersist && *c.Backup.IncludeConfig {
+		return errConfigBackupIncompatible
+	}
 	type validator interface {
 		Validate() (err error)
 	}

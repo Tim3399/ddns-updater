@@ -1,6 +1,6 @@
 ARG BUILDPLATFORM=linux/amd64
 ARG ALPINE_VERSION=3.23
-ARG GO_VERSION=1.26
+ARG GO_VERSION=1.26.6
 ARG XCPUTRANSLATE_VERSION=v0.9.0
 ARG GOLANGCI_LINT_VERSION=v2.11.4
 ARG MOCKGEN_VERSION=v0.6.0
@@ -75,6 +75,7 @@ COPY --from=build --chown=${UID}:${GID} /tmp/data /updater/data
 ENV \
     # Core
     CONFIG= \
+    CONFIG_PERSIST=yes \
     PERIOD=5m \
     UPDATE_COOLDOWN_PERIOD=5m \
     PUBLICIP_FETCHERS=all \
@@ -95,6 +96,8 @@ ENV \
     # Backup
     BACKUP_PERIOD=0 \
     BACKUP_DIRECTORY=/updater/data \
+    BACKUP_INCLUDE_CONFIG= \
+    BACKUP_KEEP=0 \
     # Other
     LOG_LEVEL=info \
     LOG_CALLER=hidden \
