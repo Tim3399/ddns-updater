@@ -151,7 +151,7 @@ func _main(ctx context.Context, reader *reader.Reader, args []string, logger log
 		return err
 	}
 
-	jsonReader := jsonparams.NewReader(logger)
+	jsonReader := jsonparams.NewReader(logger, *config.Paths.ConfigPersist)
 	providers, warnings, err := jsonReader.JSONProviders(*config.Paths.Config)
 	for _, w := range warnings {
 		logger.Warn(w)
@@ -211,7 +211,8 @@ func _main(ctx context.Context, reader *reader.Reader, args []string, logger log
 	updaterService := update.NewService(db, updater, ipGetter, config.Update.Period,
 		config.Update.Cooldown, logger, resolver, timeNow, hioClient)
 
-	healthServer, err := createHealthServer(db, resolver, logger, *config.Health.ServerAddress)
+	healthServer, err := createHealthServer(db, resolver, logger,
+		*config.Health.ServerAddress, timeNow)
 	if err != nil {
 		return fmt.Errorf("creating health server: %w", err)
 	}
@@ -224,7 +225,11 @@ func _main(ctx context.Context, reader *reader.Reader, args []string, logger log
 	var backupService goservices.Service
 	backupLogger := logger.New(log.SetComponent("backup"))
 	backupService = backup.New(*config.Backup.Period, *config.Paths.DataDir,
-		*config.Backup.Directory, backupLogger)
+		*config.Backup.Directory, backupLogger, backup.Options{
+			ConfigFilepath: *config.Paths.Config,
+			IncludeConfig:  *config.Backup.IncludeConfig,
+			Keep:           *config.Backup.Keep,
+		})
 	backupService, err = goservices.NewRestarter(goservices.RestarterSettings{Service: backupService})
 	if err != nil {
 		return fmt.Errorf("creating backup restarter: %w", err)
@@ -355,13 +360,13 @@ func exitHealthchecksio(hioClient *healthchecksio.Client,
 
 //nolint:ireturn
 func createHealthServer(db health.AllSelecter, resolver health.LookupIPer,
-	logger log.LoggerInterface, serverAddress string) (
+	logger log.LoggerInterface, serverAddress string, timeNow func() time.Time) (
 	healthServer goservices.Service, err error,
 ) {
 	if serverAddress == "" {
 		return noop.New("healthcheck server"), nil
 	}
-	isHealthy := health.MakeIsHealthy(db, resolver)
+	isHealthy := health.MakeIsHealthy(db, resolver, timeNow)
 	healthLogger := logger.New(log.SetComponent("healthcheck server"))
 	return health.NewServer(serverAddress, healthLogger, isHealthy)
 }

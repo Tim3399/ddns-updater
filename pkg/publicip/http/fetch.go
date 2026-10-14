@@ -14,9 +14,16 @@ import (
 )
 
 var (
-	ErrNoIPFound  = errors.New("no IP address found")
-	ErrTooManyIPs = errors.New("too many IP addresses")
-	ErrBanned     = errors.New("we got banned")
+	ErrNoIPFound        = errors.New("no IP address found")
+	ErrTooManyIPs       = errors.New("too many IP addresses")
+	ErrBanned           = errors.New("we got banned")
+	ErrHTTPStatus       = errors.New("unexpected HTTP status")
+	ErrResponseTooLarge = errors.New("response body too large")
+)
+
+const (
+	maxPublicIPResponseBytes int64 = 64 * 1024
+	maxErrorResponseBytes    int64 = 1024
 )
 
 func fetch(ctx context.Context, client *http.Client, url string,
@@ -37,17 +44,21 @@ func fetch(ctx context.Context, client *http.Client, url string,
 	case http.StatusOK:
 	case http.StatusForbidden, http.StatusTooManyRequests:
 		return netip.Addr{}, fmt.Errorf("%w: %d (%s)", ErrBanned,
-			response.StatusCode, bodyToSingleLine(response.Body))
+			response.StatusCode, bodyToSingleLine(
+				io.LimitReader(response.Body, maxErrorResponseBytes)))
+	default:
+		return netip.Addr{}, fmt.Errorf("%w: %d (%s)", ErrHTTPStatus,
+			response.StatusCode, bodyToSingleLine(
+				io.LimitReader(response.Body, maxErrorResponseBytes)))
 	}
 
-	b, err := io.ReadAll(response.Body)
+	b, err := io.ReadAll(io.LimitReader(response.Body, maxPublicIPResponseBytes+1))
 	if err != nil {
 		return netip.Addr{}, err
 	}
-
-	err = response.Body.Close()
-	if err != nil {
-		return netip.Addr{}, err
+	if int64(len(b)) > maxPublicIPResponseBytes {
+		return netip.Addr{}, fmt.Errorf("%w: limit is %d bytes",
+			ErrResponseTooLarge, maxPublicIPResponseBytes)
 	}
 
 	s := string(b)

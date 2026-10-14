@@ -11,6 +11,7 @@ import (
 	"net/netip"
 	"net/url"
 	"strconv"
+	"sync/atomic"
 
 	"github.com/qdm12/ddns-updater/internal/models"
 	"github.com/qdm12/ddns-updater/internal/provider/constants"
@@ -27,6 +28,7 @@ type Provider struct {
 	ipv6Suffix netip.Prefix
 	apiKey     string
 	ttl        uint32
+	knownTTL   atomic.Uint32
 }
 
 func New(data json.RawMessage, domain, owner string,
@@ -119,6 +121,17 @@ func (p *Provider) setHeaders(request *http.Request) {
 	request.Header.Set("AccessKey", p.apiKey) //nolint:canonicalheader
 }
 
+// TTL returns the record TTL in seconds if it is known.
+func (p *Provider) TTL() (ttl *uint32) {
+	if p.ttl != 0 {
+		return &p.ttl
+	}
+	if knownTTL := p.knownTTL.Load(); knownTTL != 0 {
+		return &knownTTL
+	}
+	return nil
+}
+
 func (p *Provider) Update(ctx context.Context, client *http.Client, ip netip.Addr) (newIP netip.Addr, err error) {
 	zoneID, err := p.getZoneID(ctx, client)
 	if err != nil {
@@ -141,6 +154,10 @@ func (p *Provider) Update(ctx context.Context, client *http.Client, ip netip.Add
 			return netip.Addr{}, fmt.Errorf("creating record: %w", err)
 		}
 		return ip, nil
+	}
+
+	if record.TTL != 0 {
+		p.knownTTL.Store(record.TTL)
 	}
 
 	if record.IP == ip {
@@ -206,6 +223,7 @@ type dnsRecord struct {
 	ID   int64
 	Name string
 	IP   netip.Addr
+	TTL  uint32
 }
 
 func (p *Provider) getRecord(ctx context.Context, client *http.Client, zoneID int64,
@@ -238,6 +256,7 @@ func (p *Provider) getRecord(ctx context.Context, client *http.Client, zoneID in
 			Type  int    `json:"Type"`
 			Value string `json:"Value"`
 			Name  string `json:"Name"`
+			TTL   uint32 `json:"Ttl"`
 		} `json:"Records"`
 	}
 	err = json.Unmarshal(bodyBytes, &parsedJSON)
@@ -260,6 +279,7 @@ func (p *Provider) getRecord(ctx context.Context, client *http.Client, zoneID in
 			ID:   record.ID,
 			Name: record.Name,
 			IP:   ip,
+			TTL:  record.TTL,
 		})
 	}
 

@@ -136,23 +136,7 @@ func stringsToHTTPProviders(providers []string, ipVersion ipversion.IPVersion) (
 
 // ToDNSPOptions assumes the settings have been validated.
 func (p *PubIP) ToDNSPOptions() (options []dns.Option) {
-	uniqueProviders := make(map[string]struct{}, len(p.DNSProviders))
-	for _, provider := range p.DNSProviders {
-		if provider != all {
-			uniqueProviders[provider] = struct{}{}
-		}
-
-		allProviders := dns.ListProviders()
-		for _, provider := range allProviders {
-			uniqueProviders[string(provider)] = struct{}{}
-		}
-	}
-
-	providers := make([]dns.Provider, 0, len(uniqueProviders))
-	for providerString := range uniqueProviders {
-		providers = append(providers, dns.Provider(providerString))
-	}
-
+	providers := expandDNSProviders(p.DNSProviders)
 	return []dns.Option{
 		dns.SetTimeout(p.DNSTimeout),
 		dns.SetProviders(providers[0], providers[1:]...),
