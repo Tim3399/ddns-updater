@@ -15,21 +15,17 @@ func (p *Provider) waitAction(ctx context.Context, client *http.Client, id uint6
 		return fmt.Errorf("%w: action id is zero", ddnserrors.ErrReceivedNoResult)
 	}
 
-	// Zone actions can take several seconds after the DNS records have changed.
-	// Bound the entire wait, including HTTP requests, while respecting the caller.
+	// An action can take more than a few seconds to complete, so it is polled
+	// until it completes, for at most this duration.
 	const maxWait = time.Minute
 	ctx, cancel := context.WithTimeout(ctx, maxWait)
 	defer cancel()
 
 	const sleepDuration = time.Second
 	for {
-		err := ctx.Err()
-		if err != nil {
-			return fmt.Errorf("waiting for action id %d: %w", id, err)
-		}
 		parsed, err := p.getAction(ctx, client, id)
 		if err != nil {
-			return err
+			return fmt.Errorf("getting action: %w", err)
 		}
 
 		action := parsed.Action
@@ -41,7 +37,7 @@ func (p *Provider) waitAction(ctx context.Context, client *http.Client, id uint6
 			select {
 			case <-ctx.Done():
 				timer.Stop()
-				return fmt.Errorf("waiting for action id %d: %w", id, ctx.Err())
+				return ctx.Err()
 			case <-timer.C:
 			}
 		case "error":
@@ -66,13 +62,14 @@ func (p *Provider) getAction(ctx context.Context, client *http.Client, id uint64
 
 	response, err := client.Do(request)
 	if err != nil {
-		return parsed, err
+		return parsed, fmt.Errorf("sending http request: %w", err)
 	}
 	defer response.Body.Close()
 
 	if response.StatusCode != http.StatusOK {
 		return parsed, handleErrorResponse(response)
 	}
+
 	decoder := json.NewDecoder(response.Body)
 	err = decoder.Decode(&parsed)
 	if err != nil {

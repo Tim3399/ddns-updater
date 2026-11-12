@@ -17,7 +17,7 @@ func (h *handlers) update(w http.ResponseWriter, _ *http.Request) {
 	_, _ = w.Write([]byte(message))
 }
 
-func (h *handlers) updateMethodNotAllowed(w http.ResponseWriter, _ *http.Request) {
+func updateMethodNotAllowed(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Allow", http.MethodPost)
 	http.Error(w, "updates must use POST /update", http.StatusMethodNotAllowed)
 }

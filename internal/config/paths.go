@@ -67,8 +67,7 @@ func (p *Paths) read(reader *reader.Reader) (err error) {
 	if err != nil {
 		return err
 	}
-	environmentConfig := reader.Get("CONFIG")
-	p.environmentConfig = environmentConfig != nil && *environmentConfig != ""
+	p.environmentConfig = reader.Get("CONFIG") != nil
 
 	umaskString := reader.String("UMASK")
 	if umaskString != "" {

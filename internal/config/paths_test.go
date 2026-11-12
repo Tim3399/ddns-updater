@@ -4,10 +4,55 @@ import (
 	"io/fs"
 	"testing"
 
-	settingsreader "github.com/qdm12/gosettings/reader"
+	"github.com/qdm12/gosettings/reader"
+	"github.com/qdm12/gosettings/reader/sources/env"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
+
+func Test_Paths_read(t *testing.T) {
+	t.Parallel()
+
+	testCases := map[string]struct {
+		environ    []string
+		paths      Paths
+		errMessage string
+	}{
+		"config_from_file": {
+			environ: []string{"DATADIR=/data"},
+			paths:   Paths{DataDir: new("/data")},
+		},
+		"config_from_environment_not_persisted": {
+			environ: []string{`CONFIG={"settings":[]}`, "CONFIG_PERSIST=false"},
+			paths: Paths{
+				ConfigPersist:     new(false),
+				environmentConfig: true,
+			},
+		},
+		"config_persist_not_a_boolean": {
+			environ:    []string{"CONFIG_PERSIST=abc"},
+			errMessage: "environment variable CONFIG_PERSIST",
+		},
+	}
+
+	for name, testCase := range testCases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			source := env.New(env.Settings{Environ: testCase.environ})
+			settingsReader := reader.New(reader.Settings{Sources: []reader.Source{source}})
+
+			var paths Paths
+			err := paths.read(settingsReader)
+
+			if testCase.errMessage != "" {
+				assert.ErrorContains(t, err, testCase.errMessage)
+				return
+			}
+			assert.NoError(t, err)
+			assert.Equal(t, testCase.paths, paths)
+		})
+	}
+}
 
 func Test_parseUmask(t *testing.T) {
 	t.Parallel()
@@ -45,17 +90,4 @@ func Test_parseUmask(t *testing.T) {
 			assert.Equal(t, testCase.umask, umask)
 		})
 	}
-}
-
-func TestPathsReadRejectsInvalidConfigPersist(t *testing.T) {
-	t.Setenv("DATADIR", "")
-	t.Setenv("CONFIG_FILEPATH", "")
-	t.Setenv("CONFIG_PERSIST", "invalid")
-	t.Setenv("CONFIG", "")
-	t.Setenv("UMASK", "")
-
-	var paths Paths
-	err := paths.read(settingsreader.New(settingsreader.Settings{}))
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "CONFIG_PERSIST")
 }

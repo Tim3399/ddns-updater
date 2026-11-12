@@ -3,25 +3,26 @@ package backup
 import (
 	"archive/zip"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 )
 
-// pruneBackups deletes the oldest backups in outputDir so that at most
+// pruneBackups removes the oldest backups from the directory so that at most
 // keep backups remain. Files which are not readable backup archives are
-// neither counted nor deleted. A keep value of zero keeps all backups.
-func pruneBackups(outputDir string, keep uint) error {
+// neither counted nor removed. A keep value of zero keeps all backups.
+func pruneBackups(directory string, keep uint) error {
 	if keep == 0 {
 		return nil
 	}
 
-	entries, err := os.ReadDir(outputDir)
+	entries, err := os.ReadDir(directory)
 	if err != nil {
-		return err
+		return fmt.Errorf("reading backup directory: %w", err)
 	}
 
 	type backup struct {
@@ -31,11 +32,10 @@ func pruneBackups(outputDir string, keep uint) error {
 	backups := make([]backup, 0, len(entries))
 	for _, entry := range entries {
 		name := entry.Name()
-		if entry.IsDir() || !strings.HasPrefix(name, backupFilePrefix) ||
-			!strings.HasSuffix(name, ".zip") {
+		if entry.IsDir() || !strings.HasPrefix(name, zipFileNamePrefix) || !strings.HasSuffix(name, ".zip") {
 			continue
 		}
-		path := filepath.Join(outputDir, name)
+		path := filepath.Join(directory, name)
 		if !isBackupArchive(path) {
 			continue
 		}
@@ -50,42 +50,38 @@ func pruneBackups(outputDir string, keep uint) error {
 		return nil
 	}
 
-	sort.SliceStable(backups, func(i, j int) bool {
-		return backups[i].modTime.Before(backups[j].modTime)
+	slices.SortStableFunc(backups, func(left, right backup) int {
+		return left.modTime.Compare(right.modTime)
 	})
 	for _, backup := range backups[:uint(len(backups))-keep] {
 		err = os.Remove(backup.path)
 		if err != nil {
-			return err
+			return fmt.Errorf("removing backup: %w", err)
 		}
 	}
 	return nil
 }
 
-// isBackupArchive reports whether the file at path is a readable
-// ZIP archive containing the updates file. Every file in the archive
-// is read in full to verify its checksum.
+// isBackupArchive reports whether the file is a ZIP archive containing the
+// updates file, with every archived file passing its checksum verification.
 func isBackupArchive(path string) bool {
 	reader, err := zip.OpenReader(path)
 	if err != nil {
 		return false
 	}
 	defer reader.Close()
+
 	hasUpdates := false
 	for _, file := range reader.File {
 		if !isReadable(file) {
 			return false
 		}
-		if file.Name == updatesArchiveName {
+		if file.Name == "updates.json" {
 			hasUpdates = true
 		}
 	}
 	return hasUpdates
 }
-
-// maxArchivedFileSize limits how much is decompressed per archived file,
-// which is far above the size of the data files.
-const maxArchivedFileSize = 64 << 20
 
 func isReadable(file *zip.File) bool {
 	reader, err := file.Open()
@@ -93,6 +89,9 @@ func isReadable(file *zip.File) bool {
 		return false
 	}
 	defer reader.Close()
-	n, err := io.CopyN(io.Discard, reader, maxArchivedFileSize+1)
-	return errors.Is(err, io.EOF) && n <= maxArchivedFileSize
+	// The checksum is verified once the file is read to its end, and the data
+	// files are far smaller than this limit on what gets decompressed.
+	const maxSize = 64 << 20
+	size, err := io.CopyN(io.Discard, reader, maxSize+1)
+	return errors.Is(err, io.EOF) && size <= maxSize
 }

@@ -2,97 +2,106 @@ package config
 
 import (
 	"testing"
+	"time"
 
-	settingsreader "github.com/qdm12/gosettings/reader"
+	"github.com/qdm12/gosettings/reader"
+	"github.com/qdm12/gosettings/reader/sources/env"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
-func TestBackupReadRejectsInvalidKeep(t *testing.T) {
-	t.Setenv("BACKUP_PERIOD", "")
-	t.Setenv("BACKUP_DIRECTORY", "")
-	t.Setenv("BACKUP_INCLUDE_CONFIG", "")
-	t.Setenv("BACKUP_KEEP", "invalid")
-
-	var backup Backup
-	err := backup.read(settingsreader.New(settingsreader.Settings{}))
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "BACKUP_KEEP")
-}
-
-func TestBackupReadRejectsInvalidIncludeConfig(t *testing.T) {
-	t.Setenv("BACKUP_PERIOD", "")
-	t.Setenv("BACKUP_DIRECTORY", "")
-	t.Setenv("BACKUP_INCLUDE_CONFIG", "invalid")
-	t.Setenv("BACKUP_KEEP", "")
-
-	var backup Backup
-	err := backup.read(settingsreader.New(settingsreader.Settings{}))
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "BACKUP_INCLUDE_CONFIG")
-}
-
-func TestConfigPolicyDefaults(t *testing.T) {
+func Test_Backup_read(t *testing.T) {
 	t.Parallel()
 
 	testCases := map[string]struct {
-		environmentConfig bool
-		persist           bool
-		include           *bool
-		wantInclude       bool
-		wantError         string
+		environ    []string
+		backup     Backup
+		errMessage string
 	}{
-		"file config preserves historical include default": {
-			persist:     false,
-			wantInclude: true,
+		"keep_and_include_config_not_set": {
+			environ: []string{"BACKUP_DIRECTORY=/backups"},
+			backup:  Backup{Directory: new("/backups")},
 		},
-		"persisted environment config is included": {
-			environmentConfig: true,
-			persist:           true,
-			wantInclude:       true,
+		"keep_set": {
+			environ: []string{"BACKUP_KEEP=3"},
+			backup:  Backup{Keep: new(uint(3))},
 		},
-		"non persisted environment config is excluded": {
-			environmentConfig: true,
-			persist:           false,
-			wantInclude:       false,
+		"keep_negative": {
+			environ:    []string{"BACKUP_KEEP=-1"},
+			errMessage: "environment variable BACKUP_KEEP",
 		},
-		"explicit incompatible include is rejected": {
-			environmentConfig: true,
-			persist:           false,
-			include:           new(true),
-			wantInclude:       true,
-			wantError:         "BACKUP_INCLUDE_CONFIG cannot be enabled",
+		"keep_not_a_number": {
+			environ:    []string{"BACKUP_KEEP=abc"},
+			errMessage: "environment variable BACKUP_KEEP",
+		},
+		"include_config_disabled": {
+			environ: []string{"BACKUP_INCLUDE_CONFIG=false"},
+			backup:  Backup{IncludeConfig: new(false)},
+		},
+		"include_config_not_a_boolean": {
+			environ:    []string{"BACKUP_INCLUDE_CONFIG=abc"},
+			errMessage: "environment variable BACKUP_INCLUDE_CONFIG",
 		},
 	}
 
 	for name, testCase := range testCases {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			configuration := Config{}
-			configuration.Paths.environmentConfig = testCase.environmentConfig
-			configuration.Paths.ConfigPersist = new(testCase.persist)
-			configuration.Backup.IncludeConfig = testCase.include
-			configuration.SetDefaults()
-			assert.Equal(t, testCase.wantInclude, *configuration.Backup.IncludeConfig)
-			err := configuration.Validate()
-			if testCase.wantError == "" {
-				assert.NoError(t, err)
-			} else {
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), testCase.wantError)
+
+			source := env.New(env.Settings{Environ: testCase.environ})
+			settingsReader := reader.New(reader.Settings{Sources: []reader.Source{source}})
+
+			var backup Backup
+			err := backup.read(settingsReader)
+
+			if testCase.errMessage != "" {
+				assert.ErrorContains(t, err, testCase.errMessage)
+				return
 			}
+			assert.NoError(t, err)
+			assert.Equal(t, testCase.backup, backup)
 		})
 	}
 }
 
-func TestBackupReadRejectsNegativeKeep(t *testing.T) {
-	t.Setenv("BACKUP_PERIOD", "")
-	t.Setenv("BACKUP_DIRECTORY", "")
-	t.Setenv("BACKUP_INCLUDE_CONFIG", "")
-	t.Setenv("BACKUP_KEEP", "-1")
+func Test_Backup_String(t *testing.T) {
+	t.Parallel()
 
-	var backup Backup
-	err := backup.read(settingsreader.New(settingsreader.Settings{}))
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "BACKUP_KEEP")
+	testCases := map[string]struct {
+		backup  Backup
+		summary string
+	}{
+		"disabled": {
+			backup:  Backup{},
+			summary: "Backup: disabled",
+		},
+		"keep_all_backups_with_config": {
+			backup: Backup{Period: new(time.Hour)},
+			summary: `Backup
+├── Period: 1h0m0s
+├── Directory: ./data
+├── Keep: all backups
+└── Include config: true`,
+		},
+		"keep_some_backups_without_config": {
+			backup: Backup{Period: new(time.Hour), Keep: new(uint(3)), IncludeConfig: new(false)},
+			summary: `Backup
+├── Period: 1h0m0s
+├── Directory: ./data
+├── Keep: 3 backups
+└── Include config: false`,
+		},
+	}
+
+	for name, testCase := range testCases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			const includeConfig = true
+			testCase.backup.setDefaults(includeConfig)
+
+			summary := testCase.backup.String()
+
+			assert.Equal(t, testCase.summary, summary)
+		})
+	}
 }

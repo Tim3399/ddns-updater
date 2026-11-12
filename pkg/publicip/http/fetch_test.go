@@ -45,24 +45,24 @@ func Test_fetch(t *testing.T) {
 			httpErr: errDummy,
 			err:     errors.New(`Get "https://opendns.com/ip": dummy`),
 		},
-		"unexpected status": {
-			ctx:         context.Background(),
+		"unexpected_status": {
+			ctx:         t.Context(),
 			url:         "https://opendns.com/ip",
 			version:     ipversion.IP4or6,
 			httpStatus:  http.StatusInternalServerError,
 			httpContent: []byte(`1.67.201.251`),
 			err:         errors.New("unexpected HTTP status: 500 (1.67.201.251)"),
 		},
-		"too many requests": {
-			ctx:         context.Background(),
+		"too_many_requests": {
+			ctx:         t.Context(),
 			url:         "https://opendns.com/ip",
 			version:     ipversion.IP4or6,
 			httpStatus:  http.StatusTooManyRequests,
 			httpContent: []byte(`slow down`),
 			err:         errors.New("we got banned: 429 (slow down)"),
 		},
-		"response too large": {
-			ctx:         context.Background(),
+		"response_too_large": {
+			ctx:         t.Context(),
 			url:         "https://opendns.com/ip",
 			version:     ipversion.IP4or6,
 			httpContent: bytes.Repeat([]byte("x"), 64*1024+1),

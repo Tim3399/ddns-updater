@@ -121,53 +121,69 @@ func checkHistoryEvents(events []models.HistoryEvent) (err error) {
 }
 
 func (db *Database) write() error {
-	// Preserve explicitly configured permissions when replacing an existing file.
-	// New databases retain the restrictive permissions provided by CreateTemp.
-	fileInfo, err := os.Stat(db.filepath)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("checking database permissions: %w", err)
-	}
-
-	directory := filepath.Dir(db.filepath)
-	tempFile, err := os.CreateTemp(directory, "."+filepath.Base(db.filepath)+".tmp-*")
+	data, err := json.MarshalIndent(db.data, "", "  ")
 	if err != nil {
-		return fmt.Errorf("creating temporary database file: %w", err)
+		return fmt.Errorf("encoding data: %w", err)
 	}
-	tempPath := tempFile.Name()
-	defer func() {
-		_ = os.Remove(tempPath)
-	}()
-	if fileInfo != nil {
-		err = tempFile.Chmod(fileInfo.Mode().Perm())
+	data = append(data, '\n')
+
+	// The data is written to a temporary file, which then replaces the database
+	// file, so the database file is not lost if writing it fails or is interrupted.
+	const filePerm = os.FileMode(0o666)
+	temporaryFilepath := db.filepath + ".tmp"
+	temporaryFile, err := os.OpenFile(temporaryFilepath, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, filePerm)
+	if err == nil {
+		err = writeTemporaryFile(temporaryFile, data, db.filepath)
 		if err != nil {
-			_ = tempFile.Close()
-			return fmt.Errorf("setting database permissions: %w", err)
+			_ = os.Remove(temporaryFilepath)
+			return fmt.Errorf("writing temporary database file: %w", err)
 		}
+		err = os.Rename(temporaryFilepath, db.filepath)
+		if err == nil {
+			return nil
+		}
+		_ = os.Remove(temporaryFilepath)
 	}
 
-	encoder := json.NewEncoder(tempFile)
-	encoder.SetIndent("", "  ")
-	err = encoder.Encode(db.data)
+	// The database file cannot be replaced, for example if it is a bind mounted
+	// file or if its directory is read only, so it is written in place.
+	err = os.WriteFile(db.filepath, data, filePerm)
 	if err != nil {
-		_ = tempFile.Close()
-		return fmt.Errorf("encoding data to file: %w", err)
+		return fmt.Errorf("writing database file: %w", err)
+	}
+	return nil
+}
+
+// writeTemporaryFile writes the data to the temporary file and closes it.
+// The temporary file is given the permissions of the file it replaces,
+// if that file exists.
+func writeTemporaryFile(temporaryFile *os.File, data []byte, replacedFilepath string) (err error) {
+	defer func() {
+		closeErr := temporaryFile.Close()
+		if err == nil && closeErr != nil {
+			err = fmt.Errorf("closing file: %w", closeErr)
+		}
+	}()
+
+	replacedFileInfo, err := os.Stat(replacedFilepath)
+	switch {
+	case err == nil:
+		err = temporaryFile.Chmod(replacedFileInfo.Mode().Perm())
+		if err != nil {
+			return fmt.Errorf("setting file permissions: %w", err)
+		}
+	case !errors.Is(err, os.ErrNotExist):
+		return fmt.Errorf("stating replaced file: %w", err)
 	}
 
-	err = tempFile.Sync()
+	_, err = temporaryFile.Write(data)
 	if err != nil {
-		_ = tempFile.Close()
-		return fmt.Errorf("syncing temporary database file: %w", err)
+		return fmt.Errorf("writing data: %w", err)
 	}
 
-	err = tempFile.Close()
+	err = temporaryFile.Sync()
 	if err != nil {
-		return fmt.Errorf("closing temporary database file: %w", err)
+		return fmt.Errorf("syncing file: %w", err)
 	}
-
-	err = os.Rename(tempPath, db.filepath)
-	if err != nil {
-		return fmt.Errorf("replacing database file: %w", err)
-	}
-
 	return nil
 }

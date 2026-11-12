@@ -9,17 +9,19 @@ import (
 )
 
 type Backup struct {
-	Period        *time.Duration
-	Directory     *string
+	Period    *time.Duration
+	Directory *string
+	// Keep is the number of backups to keep, where zero keeps all backups.
+	Keep *uint
+	// IncludeConfig is true if the configuration file is included in backups.
 	IncludeConfig *bool
-	Keep          *uint
 }
 
 func (b *Backup) setDefaults(includeConfig bool) {
 	b.Period = gosettings.DefaultPointer(b.Period, 0)
 	b.Directory = gosettings.DefaultPointer(b.Directory, "./data")
-	b.IncludeConfig = gosettings.DefaultPointer(b.IncludeConfig, includeConfig)
 	b.Keep = gosettings.DefaultPointer(b.Keep, 0)
+	b.IncludeConfig = gosettings.DefaultPointer(b.IncludeConfig, includeConfig)
 }
 
 func (b Backup) Validate() (err error) {
@@ -37,12 +39,12 @@ func (b Backup) toLinesNode() *gotree.Node {
 	node := gotree.New("Backup")
 	node.Appendf("Period: %s", b.Period)
 	node.Appendf("Directory: %s", *b.Directory)
-	node.Appendf("Include config: %t", *b.IncludeConfig)
 	if *b.Keep == 0 {
-		node.Appendf("Retention: unlimited")
+		node.Appendf("Keep: all backups")
 	} else {
-		node.Appendf("Retention: %d", *b.Keep)
+		node.Appendf("Keep: %d backups", *b.Keep)
 	}
+	node.Appendf("Include config: %t", *b.IncludeConfig)
 	return node
 }
 
@@ -53,10 +55,12 @@ func (b *Backup) read(reader *reader.Reader) (err error) {
 	}
 
 	b.Directory = reader.Get("BACKUP_DIRECTORY")
-	b.IncludeConfig, err = reader.BoolPtr("BACKUP_INCLUDE_CONFIG")
+
+	b.Keep, err = reader.UintPtr("BACKUP_KEEP")
 	if err != nil {
 		return err
 	}
-	b.Keep, err = reader.UintPtr("BACKUP_KEEP")
+
+	b.IncludeConfig, err = reader.BoolPtr("BACKUP_INCLUDE_CONFIG")
 	return err
 }
