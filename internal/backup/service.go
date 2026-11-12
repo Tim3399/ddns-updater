@@ -13,6 +13,7 @@ type Service struct {
 	dataDir      string
 	outputDir    string
 	logger       Logger
+	keep         uint
 
 	// Internal fields
 	stopCh chan<- struct{}
@@ -20,13 +21,14 @@ type Service struct {
 }
 
 func New(backupPeriod time.Duration,
-	dataDir, outputDir string, logger Logger,
+	dataDir, outputDir string, logger Logger, keep uint,
 ) *Service {
 	return &Service{
 		logger:       logger,
 		backupPeriod: backupPeriod,
 		dataDir:      dataDir,
 		outputDir:    outputDir,
+		keep:         keep,
 	}
 }
 
@@ -34,8 +36,10 @@ func (s *Service) String() string {
 	return "backup"
 }
 
+const zipFileNamePrefix = "ddns-updater-backup-"
+
 func makeZipFileName() string {
-	return "ddns-updater-backup-" + strconv.Itoa(int(time.Now().UnixNano())) + ".zip"
+	return zipFileNamePrefix + strconv.Itoa(int(time.Now().UnixNano())) + ".zip"
 }
 
 func (s *Service) Start(ctx context.Context) (runError <-chan error, startErr error) {
@@ -46,7 +50,7 @@ func (s *Service) Start(ctx context.Context) (runError <-chan error, startErr er
 	done := make(chan struct{})
 	s.done = done
 	go run(ready, runErrorCh, stopCh, done,
-		s.outputDir, s.dataDir, s.backupPeriod, s.logger)
+		s.outputDir, s.dataDir, s.backupPeriod, s.logger, s.keep)
 	select {
 	case <-ready:
 	case <-ctx.Done():
@@ -57,7 +61,7 @@ func (s *Service) Start(ctx context.Context) (runError <-chan error, startErr er
 
 func run(ready chan<- struct{}, runError chan<- error, stopCh <-chan struct{},
 	done chan<- struct{}, outputDir, dataDir string, backupPeriod time.Duration,
-	logger Logger,
+	logger Logger, keep uint,
 ) {
 	defer close(done)
 
@@ -84,6 +88,11 @@ func run(ready chan<- struct{}, runError chan<- error, stopCh <-chan struct{},
 			filepath.Join(dataDir, "config.json"),
 			filepath.Join(dataDir, "updates.json"),
 		)
+		if err != nil {
+			runError <- err
+			return
+		}
+		err = pruneBackups(outputDir, keep)
 		if err != nil {
 			runError <- err
 			return
