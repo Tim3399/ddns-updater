@@ -15,31 +15,17 @@ func (p *Provider) waitAction(ctx context.Context, client *http.Client, id uint6
 		return fmt.Errorf("%w: action id is zero", ddnserrors.ErrReceivedNoResult)
 	}
 
+	// An action can take more than a few seconds to complete, so it is polled
+	// until it completes, for at most this duration.
+	const maxWait = time.Minute
+	ctx, cancel := context.WithTimeout(ctx, maxWait)
+	defer cancel()
+
 	const sleepDuration = time.Second
-	const tries = 3
-	for range tries {
-		url := fmt.Sprintf("https://api.hetzner.cloud/v1/zones/actions/%d", id)
-		request, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	for {
+		parsed, err := p.getAction(ctx, client, id)
 		if err != nil {
-			return fmt.Errorf("creating http request: %w", err)
-		}
-		p.setHeaders(request)
-
-		response, err := client.Do(request)
-		if err != nil {
-			return err
-		}
-		defer response.Body.Close()
-
-		if response.StatusCode != http.StatusOK {
-			return handleErrorResponse(response)
-		}
-
-		var parsed actionResponse
-		decoder := json.NewDecoder(response.Body)
-		err = decoder.Decode(&parsed)
-		if err != nil {
-			return fmt.Errorf("json decoding response body: %w", err)
+			return fmt.Errorf("getting action: %w", err)
 		}
 
 		action := parsed.Action
@@ -64,5 +50,30 @@ func (p *Provider) waitAction(ctx context.Context, client *http.Client, id uint6
 			return fmt.Errorf("server side DNS error: unknown action status %q for action id %d", action.Status, action.ID)
 		}
 	}
-	return fmt.Errorf("unsuccessful result: action id %d did not complete after %d tries", id, tries)
+}
+
+func (p *Provider) getAction(ctx context.Context, client *http.Client, id uint64) (parsed actionResponse, err error) {
+	url := fmt.Sprintf("https://api.hetzner.cloud/v1/zones/actions/%d", id)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return parsed, fmt.Errorf("creating http request: %w", err)
+	}
+	p.setHeaders(request)
+
+	response, err := client.Do(request)
+	if err != nil {
+		return parsed, fmt.Errorf("sending http request: %w", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		return parsed, handleErrorResponse(response)
+	}
+
+	decoder := json.NewDecoder(response.Body)
+	err = decoder.Decode(&parsed)
+	if err != nil {
+		return parsed, fmt.Errorf("json decoding response body: %w", err)
+	}
+	return parsed, nil
 }
