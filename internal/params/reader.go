@@ -6,10 +6,13 @@ import (
 )
 
 type Reader struct {
-	logger                   Logger
+	logger Logger
+	// environmentConfig is the configuration given with the CONFIG
+	// environment variable, which is empty if it is not set.
+	environmentConfig        string
+	persistEnvironmentConfig bool
 	readFile                 func(filename string) ([]byte, error)
 	writeFile                func(filename string, data []byte, perm fs.FileMode) (err error)
-	persistEnvironmentConfig bool
 }
 
 type Logger interface {
@@ -17,11 +20,12 @@ type Logger interface {
 	Debug(s string)
 }
 
-func NewReader(logger Logger, persistEnvironmentConfig bool) *Reader {
+func NewReader(logger Logger, environmentConfig string, persistEnvironmentConfig bool) *Reader {
 	return &Reader{
 		logger:                   logger,
+		environmentConfig:        environmentConfig,
+		persistEnvironmentConfig: persistEnvironmentConfig,
 		readFile:                 os.ReadFile,
 		writeFile:                os.WriteFile,
-		persistEnvironmentConfig: persistEnvironmentConfig,
 	}
 }

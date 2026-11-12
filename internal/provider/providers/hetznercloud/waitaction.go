@@ -15,16 +15,18 @@ func (p *Provider) waitAction(ctx context.Context, client *http.Client, id uint6
 		return fmt.Errorf("%w: action id is zero", ddnserrors.ErrReceivedNoResult)
 	}
 
-	// An action can take more than a few seconds to complete, so it is polled
-	// until it completes, for at most this duration.
 	const maxWait = time.Minute
-	ctx, cancel := context.WithTimeout(ctx, maxWait)
+	errMaxWait := fmt.Errorf("unsuccessful result: action id %d did not complete after %s", id, maxWait)
+	ctx, cancel := context.WithTimeoutCause(ctx, maxWait, errMaxWait)
 	defer cancel()
 
-	const sleepDuration = time.Second
 	for {
 		parsed, err := p.getAction(ctx, client, id)
-		if err != nil {
+		switch {
+		case err == nil:
+		case ctx.Err() != nil:
+			return context.Cause(ctx)
+		default:
 			return fmt.Errorf("getting action: %w", err)
 		}
 
@@ -33,11 +35,12 @@ func (p *Provider) waitAction(ctx context.Context, client *http.Client, id uint6
 		case "success":
 			return nil
 		case "running":
+			const sleepDuration = time.Second
 			timer := time.NewTimer(sleepDuration)
 			select {
 			case <-ctx.Done():
 				timer.Stop()
-				return ctx.Err()
+				return context.Cause(ctx)
 			case <-timer.C:
 			}
 		case "error":

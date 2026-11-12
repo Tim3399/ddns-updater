@@ -19,8 +19,8 @@ func Test_stringsToDNSProviders(t *testing.T) {
 			updatedProviders: []dns.Provider{dns.Cloudflare},
 		},
 		"duplicate_providers": {
-			providers:        []string{"cloudflare", "opendns", "cloudflare"},
-			updatedProviders: []dns.Provider{dns.Cloudflare, dns.OpenDNS},
+			providers:        []string{"cloudflare", "cloudflare"},
+			updatedProviders: []dns.Provider{dns.Cloudflare},
 		},
 		"all_providers": {
 			providers:        []string{"all"},

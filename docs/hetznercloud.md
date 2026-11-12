@@ -33,24 +33,8 @@ This provider uses the Hetzner Cloud API `https://api.hetzner.cloud/v1/` which i
 
 ## RRSet ownership
 
-Hetzner Cloud groups records with the same name and type into an RRSet. When
-ddns-updater changes an existing A or AAAA RRSet, Hetzner's `set_records` action
-replaces all its values with the single dynamic IP address.
+Hetzner Cloud groups the records with the same name and type in an RRSet. When ddns-updater updates an A or AAAA RRSet, it replaces all its values with the public IP address.
 
-Use a dedicated hostname for DDNS, for example:
+Use a dedicated hostname for ddns-updater, for example `home.example.com`, and point other hostnames to it with CNAME records. Do not add other addresses to the A or AAAA RRSet of that hostname, since they are removed at the next update.
 
-```text
-home.example.com A <dynamic public IPv4>
-```
-
-Other services can point to that hostname with CNAME records. Do not add
-round-robin or static addresses to the managed A/AAAA RRSet if they must be
-preserved.
-
-If the desired dynamic IP is already one of several values in an RRSet,
-ddns-updater currently considers the record up to date and leaves every value
-unchanged. If the desired IP is absent, the subsequent update replaces the
-entire RRSet as described above.
-
-For least privilege, use a dedicated Hetzner project/API token for DNS
-infrastructure instead of reusing a broader infrastructure credential.
+If the public IP address is already one of several values of the RRSet, the RRSet is considered up to date and is left unchanged.

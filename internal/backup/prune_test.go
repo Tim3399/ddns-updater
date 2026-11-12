@@ -1,8 +1,6 @@
 package backup
 
 import (
-	"archive/zip"
-	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
@@ -15,75 +13,68 @@ import (
 func Test_pruneBackups(t *testing.T) {
 	t.Parallel()
 
-	const updatesContent = `{"records":[]}`
-	backup := makeZip(t, zip.Deflate, map[string]string{
-		"updates.json": updatesContent,
-		"config.json":  `{"settings":[]}`,
-	})
-	withoutUpdates := makeZip(t, zip.Deflate, map[string]string{
-		"config.json": `{"settings":[]}`,
-	})
-	// Flip a byte of the uncompressed content so its checksum does not match.
-	corrupted := makeZip(t, zip.Store, map[string]string{"updates.json": updatesContent})
-	contentIndex := bytes.Index(corrupted, []byte(updatesContent))
-	require.NotEqual(t, -1, contentIndex)
-	corrupted[contentIndex] ^= 0xff
-
-	type file struct {
-		content []byte
-		age     time.Duration
-	}
-
 	testCases := map[string]struct {
-		keep             uint
-		files            map[string]file
+		keep uint
+		// fileAges maps the name of each file to create to the age of its
+		// last modification.
+		fileAges         map[string]time.Duration
+		directoryName    string
 		missingDirectory bool
 		remaining        []string
 		errMessage       string
 	}{
 		"keep_zero_keeps_all": {
 			keep: 0,
-			files: map[string]file{
-				"ddns-updater-backup-1.zip": {content: backup, age: 2 * time.Hour},
-				"ddns-updater-backup-2.zip": {content: backup, age: time.Hour},
+			fileAges: map[string]time.Duration{
+				"ddns-updater-backup-1.zip": 2 * time.Hour,
+				"ddns-updater-backup-2.zip": time.Hour,
 			},
 			remaining: []string{"ddns-updater-backup-1.zip", "ddns-updater-backup-2.zip"},
 		},
 		"fewer_backups_than_keep": {
 			keep: 2,
-			files: map[string]file{
-				"ddns-updater-backup-1.zip": {content: backup, age: time.Hour},
+			fileAges: map[string]time.Duration{
+				"ddns-updater-backup-1.zip": time.Hour,
 			},
 			remaining: []string{"ddns-updater-backup-1.zip"},
 		},
-		"oldest_backups_removed": {
+		"oldest_modified_backups_removed": {
 			keep: 2,
-			files: map[string]file{
-				"ddns-updater-backup-1.zip": {content: backup, age: 3 * time.Hour},
-				"ddns-updater-backup-2.zip": {content: backup, age: time.Hour},
-				"ddns-updater-backup-3.zip": {content: backup, age: 2 * time.Hour},
+			fileAges: map[string]time.Duration{
+				"ddns-updater-backup-1.zip": time.Hour,
+				"ddns-updater-backup-2.zip": 4 * time.Hour,
+				"ddns-updater-backup-3.zip": 2 * time.Hour,
+				"ddns-updater-backup-4.zip": 3 * time.Hour,
 			},
-			remaining: []string{"ddns-updater-backup-2.zip", "ddns-updater-backup-3.zip"},
+			remaining: []string{"ddns-updater-backup-1.zip", "ddns-updater-backup-3.zip"},
+		},
+		"same_modification_time_ordered_by_name": {
+			keep: 1,
+			fileAges: map[string]time.Duration{
+				"ddns-updater-backup-1.zip": time.Hour,
+				"ddns-updater-backup-2.zip": time.Hour,
+			},
+			remaining: []string{"ddns-updater-backup-2.zip"},
 		},
 		"other_files_not_counted_nor_removed": {
 			keep: 1,
-			files: map[string]file{
-				"ddns-updater-backup-1.zip": {content: []byte("not a zip file"), age: 6 * time.Hour},
-				"ddns-updater-backup-2.zip": {content: withoutUpdates, age: 5 * time.Hour},
-				"ddns-updater-backup-3.zip": {content: corrupted, age: 4 * time.Hour},
-				"other.zip":                 {content: backup, age: 3 * time.Hour},
-				"ddns-updater-backup-4.zip": {content: backup, age: 2 * time.Hour},
-				"ddns-updater-backup-5.zip": {content: backup, age: time.Hour},
+			fileAges: map[string]time.Duration{
+				"updates.json":              5 * time.Hour,
+				"other.zip":                 5 * time.Hour,
+				"ddns-updater-backup-1.txt": 5 * time.Hour,
+				"ddns-updater-backup-2.zip": 2 * time.Hour,
+				"ddns-updater-backup-3.zip": time.Hour,
 			},
+			directoryName: "ddns-updater-backup-0.zip",
 			remaining: []string{
-				"ddns-updater-backup-1.zip", "ddns-updater-backup-2.zip",
-				"ddns-updater-backup-3.zip", "other.zip", "ddns-updater-backup-5.zip",
+				"updates.json", "other.zip", "ddns-updater-backup-1.txt",
+				"ddns-updater-backup-3.zip", "ddns-updater-backup-0.zip",
 			},
 		},
 		"missing_directory": {
 			keep:             1,
 			missingDirectory: true,
-			errMessage:       "reading backup directory",
+			errMessage:       "reading directory",
 		},
 	}
 
@@ -96,12 +87,16 @@ func Test_pruneBackups(t *testing.T) {
 				directory = filepath.Join(directory, "missing")
 			}
 			now := time.Now()
-			for fileName, file := range testCase.files {
+			for fileName, age := range testCase.fileAges {
 				path := filepath.Join(directory, fileName)
-				err := os.WriteFile(path, file.content, 0o600)
+				err := os.WriteFile(path, nil, 0o600)
 				require.NoError(t, err)
-				modTime := now.Add(-file.age)
+				modTime := now.Add(-age)
 				err = os.Chtimes(path, modTime, modTime)
+				require.NoError(t, err)
+			}
+			if testCase.directoryName != "" {
+				err := os.Mkdir(filepath.Join(directory, testCase.directoryName), 0o700)
 				require.NoError(t, err)
 			}
 
@@ -121,20 +116,4 @@ func Test_pruneBackups(t *testing.T) {
 			assert.ElementsMatch(t, testCase.remaining, remaining)
 		})
 	}
-}
-
-func makeZip(t *testing.T, method uint16, files map[string]string) []byte {
-	t.Helper()
-
-	buffer := bytes.NewBuffer(nil)
-	writer := zip.NewWriter(buffer)
-	for name, content := range files {
-		fileWriter, err := writer.CreateHeader(&zip.FileHeader{Name: name, Method: method})
-		require.NoError(t, err)
-		_, err = fileWriter.Write([]byte(content))
-		require.NoError(t, err)
-	}
-	err := writer.Close()
-	require.NoError(t, err)
-	return buffer.Bytes()
 }

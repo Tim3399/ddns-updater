@@ -1,10 +1,9 @@
 package backup
 
 import (
-	"archive/zip"
+	"cmp"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -12,9 +11,8 @@ import (
 	"time"
 )
 
-// pruneBackups removes the oldest backups from the directory so that at most
-// keep backups remain. Files which are not readable backup archives are
-// neither counted nor removed. A keep value of zero keeps all backups.
+// pruneBackups removes the oldest backup zip files from the directory given,
+// so that at most keep of them remain. It does nothing if keep is zero.
 func pruneBackups(directory string, keep uint) error {
 	if keep == 0 {
 		return nil
@@ -22,76 +20,44 @@ func pruneBackups(directory string, keep uint) error {
 
 	entries, err := os.ReadDir(directory)
 	if err != nil {
-		return fmt.Errorf("reading backup directory: %w", err)
+		return fmt.Errorf("reading directory: %w", err)
 	}
 
-	type backup struct {
-		path    string
+	type backupFile struct {
+		name    string
 		modTime time.Time
 	}
-	backups := make([]backup, 0, len(entries))
+	backupFiles := make([]backupFile, 0, len(entries))
 	for _, entry := range entries {
 		name := entry.Name()
-		if entry.IsDir() || !strings.HasPrefix(name, zipFileNamePrefix) || !strings.HasSuffix(name, ".zip") {
-			continue
-		}
-		path := filepath.Join(directory, name)
-		if !isBackupArchive(path) {
+		isBackup := entry.Type().IsRegular() &&
+			strings.HasPrefix(name, zipFileNamePrefix) && strings.HasSuffix(name, zipFileNameSuffix)
+		if !isBackup {
 			continue
 		}
 		info, err := entry.Info()
 		if err != nil {
-			continue
+			return fmt.Errorf("getting file information: %w", err)
 		}
-		backups = append(backups, backup{path: path, modTime: info.ModTime()})
+		backupFiles = append(backupFiles, backupFile{name: name, modTime: info.ModTime()})
 	}
 
-	if uint(len(backups)) <= keep {
+	if uint(len(backupFiles)) <= keep {
 		return nil
 	}
 
-	slices.SortStableFunc(backups, func(left, right backup) int {
-		return left.modTime.Compare(right.modTime)
+	// The modification time is used and not the timestamp in the file name,
+	// since that timestamp overflows on 32 bit platforms.
+	slices.SortFunc(backupFiles, func(left, right backupFile) int {
+		return cmp.Or(left.modTime.Compare(right.modTime), strings.Compare(left.name, right.name))
 	})
-	for _, backup := range backups[:uint(len(backups))-keep] {
-		err = os.Remove(backup.path)
+
+	var errs []error
+	for _, oldest := range backupFiles[:uint(len(backupFiles))-keep] {
+		err = os.Remove(filepath.Join(directory, oldest.name))
 		if err != nil {
-			return fmt.Errorf("removing backup: %w", err)
+			errs = append(errs, fmt.Errorf("removing file: %w", err))
 		}
 	}
-	return nil
-}
-
-// isBackupArchive reports whether the file is a ZIP archive containing the
-// updates file, with every archived file passing its checksum verification.
-func isBackupArchive(path string) bool {
-	reader, err := zip.OpenReader(path)
-	if err != nil {
-		return false
-	}
-	defer reader.Close()
-
-	hasUpdates := false
-	for _, file := range reader.File {
-		if !isReadable(file) {
-			return false
-		}
-		if file.Name == "updates.json" {
-			hasUpdates = true
-		}
-	}
-	return hasUpdates
-}
-
-func isReadable(file *zip.File) bool {
-	reader, err := file.Open()
-	if err != nil {
-		return false
-	}
-	defer reader.Close()
-	// The checksum is verified once the file is read to its end, and the data
-	// files are far smaller than this limit on what gets decompressed.
-	const maxSize = 64 << 20
-	size, err := io.CopyN(io.Discard, reader, maxSize+1)
-	return errors.Is(err, io.EOF) && size <= maxSize
+	return errors.Join(errs...)
 }

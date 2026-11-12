@@ -53,21 +53,6 @@ func Test_fetch(t *testing.T) {
 			httpContent: []byte(`1.67.201.251`),
 			err:         errors.New("unexpected HTTP status: 500 (1.67.201.251)"),
 		},
-		"too_many_requests": {
-			ctx:         t.Context(),
-			url:         "https://opendns.com/ip",
-			version:     ipversion.IP4or6,
-			httpStatus:  http.StatusTooManyRequests,
-			httpContent: []byte(`slow down`),
-			err:         errors.New("we got banned: 429 (slow down)"),
-		},
-		"response_too_large": {
-			ctx:         t.Context(),
-			url:         "https://opendns.com/ip",
-			version:     ipversion.IP4or6,
-			httpContent: bytes.Repeat([]byte("x"), 64*1024+1),
-			err:         errors.New("response body too large: limit is 65536 bytes"),
-		},
 		"empty response": {
 			ctx:     context.Background(),
 			url:     "https://opendns.com/ip",

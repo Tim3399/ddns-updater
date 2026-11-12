@@ -311,11 +311,10 @@ Note that:
 | `HEALTH_HEALTHCHECKSIO_UUID` | | UUID to identify with the [healthchecks.io](https://healthchecks.io) server |
 | `DATADIR` | `/updater/data` | Directory to read and write data files from internally |
 | `CONFIG_FILEPATH` | `/updater/data/config.json` | Path to the JSON configuration file |
-| `CONFIG_PERSIST` | `true` | Set to `false` to not write the configuration given with `CONFIG` to the file at `CONFIG_FILEPATH` |
-| `BACKUP_PERIOD` | `0` | Set to a period (i.e. `72h15m`) to enable zip backups of the data file updates.json and of the JSON configuration file in a zip file |
+| `CONFIG_PERSIST` | `yes` | Set to `no` to not write the configuration given with `CONFIG` to the JSON configuration file. The configuration file is then not included in backups. |
+| `BACKUP_PERIOD` | `0` | Set to a period (i.e. `72h15m`) to enable zip backups of the JSON configuration file and data/updates.json in a zip file |
 | `BACKUP_DIRECTORY` | `/updater/data` | Directory to write backup zip files to if `BACKUP_PERIOD` is not `0`. |
-| `BACKUP_KEEP` | `0` | Number of backup zip files to keep, removing the oldest ones. `0` keeps all of them. Files which are not readable backups are neither counted nor removed. |
-| `BACKUP_INCLUDE_CONFIG` | `true` | Set to `false` to not include the JSON configuration file in backups, as config.json. It must be `false` if backups are enabled, `CONFIG` is set and `CONFIG_PERSIST` is `false`. |
+| `BACKUP_KEEP` | `0` | Number of backup zip files to keep in `BACKUP_DIRECTORY`, the oldest ones being removed after each backup. `0` keeps all of them. |
 | `RESOLVER_ADDRESS` | Your network DNS | A plaintext DNS address to use to resolve your domain names defined in your settings only. For example it can be `1.1.1.1:53`. This is useful for split dns, see [#389](https://github.com/qdm12/ddns-updater/issues/389) |
 | `LOG_LEVEL` | `info` | Level of logging, `debug`, `info`, `warning` or `error` |
 | `LOG_CALLER` | `hidden` | Show caller per log line, `hidden` or `short` |

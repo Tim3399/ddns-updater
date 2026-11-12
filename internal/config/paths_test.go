@@ -17,16 +17,13 @@ func Test_Paths_read(t *testing.T) {
 		paths      Paths
 		errMessage string
 	}{
-		"config_from_file": {
+		"config_persist_not_set": {
 			environ: []string{"DATADIR=/data"},
 			paths:   Paths{DataDir: new("/data")},
 		},
-		"config_from_environment_not_persisted": {
-			environ: []string{`CONFIG={"settings":[]}`, "CONFIG_PERSIST=false"},
-			paths: Paths{
-				ConfigPersist:     new(false),
-				environmentConfig: true,
-			},
+		"config_persist_disabled": {
+			environ: []string{"CONFIG_PERSIST=no"},
+			paths:   Paths{ConfigPersist: new(false)},
 		},
 		"config_persist_not_a_boolean": {
 			environ:    []string{"CONFIG_PERSIST=abc"},

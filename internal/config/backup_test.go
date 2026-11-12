@@ -17,7 +17,7 @@ func Test_Backup_read(t *testing.T) {
 		backup     Backup
 		errMessage string
 	}{
-		"keep_and_include_config_not_set": {
+		"keep_not_set": {
 			environ: []string{"BACKUP_DIRECTORY=/backups"},
 			backup:  Backup{Directory: new("/backups")},
 		},
@@ -32,14 +32,6 @@ func Test_Backup_read(t *testing.T) {
 		"keep_not_a_number": {
 			environ:    []string{"BACKUP_KEEP=abc"},
 			errMessage: "environment variable BACKUP_KEEP",
-		},
-		"include_config_disabled": {
-			environ: []string{"BACKUP_INCLUDE_CONFIG=false"},
-			backup:  Backup{IncludeConfig: new(false)},
-		},
-		"include_config_not_a_boolean": {
-			environ:    []string{"BACKUP_INCLUDE_CONFIG=abc"},
-			errMessage: "environment variable BACKUP_INCLUDE_CONFIG",
 		},
 	}
 
@@ -74,21 +66,19 @@ func Test_Backup_String(t *testing.T) {
 			backup:  Backup{},
 			summary: "Backup: disabled",
 		},
-		"keep_all_backups_with_config": {
+		"keep_all_backups": {
 			backup: Backup{Period: new(time.Hour)},
 			summary: `Backup
 ├── Period: 1h0m0s
 ├── Directory: ./data
-├── Keep: all backups
-└── Include config: true`,
+└── Keep: all backups`,
 		},
-		"keep_some_backups_without_config": {
-			backup: Backup{Period: new(time.Hour), Keep: new(uint(3)), IncludeConfig: new(false)},
+		"keep_some_backups": {
+			backup: Backup{Period: new(time.Hour), Keep: new(uint(3))},
 			summary: `Backup
 ├── Period: 1h0m0s
 ├── Directory: ./data
-├── Keep: 3 backups
-└── Include config: false`,
+└── Keep: 3 backups`,
 		},
 	}
 

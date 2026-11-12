@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/qdm12/ddns-updater/internal/models"
@@ -127,26 +129,15 @@ func (db *Database) write() error {
 	}
 	data = append(data, '\n')
 
-	// The data is written to a temporary file, which then replaces the database
-	// file, so the database file is not lost if writing it fails or is interrupted.
-	const filePerm = os.FileMode(0o666)
-	temporaryFilepath := db.filepath + ".tmp"
-	temporaryFile, err := os.OpenFile(temporaryFilepath, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, filePerm)
-	if err == nil {
-		err = writeTemporaryFile(temporaryFile, data, db.filepath)
-		if err != nil {
-			_ = os.Remove(temporaryFilepath)
-			return fmt.Errorf("writing temporary database file: %w", err)
-		}
-		err = os.Rename(temporaryFilepath, db.filepath)
-		if err == nil {
-			return nil
-		}
-		_ = os.Remove(temporaryFilepath)
+	replaced, err := replaceFile(db.filepath, data)
+	switch {
+	case err != nil:
+		return fmt.Errorf("replacing database file: %w", err)
+	case replaced:
+		return nil
 	}
 
-	// The database file cannot be replaced, for example if it is a bind mounted
-	// file or if its directory is read only, so it is written in place.
+	const filePerm = os.FileMode(0o666)
 	err = os.WriteFile(db.filepath, data, filePerm)
 	if err != nil {
 		return fmt.Errorf("writing database file: %w", err)
@@ -154,10 +145,62 @@ func (db *Database) write() error {
 	return nil
 }
 
-// writeTemporaryFile writes the data to the temporary file and closes it.
-// The temporary file is given the permissions of the file it replaces,
-// if that file exists.
-func writeTemporaryFile(temporaryFile *os.File, data []byte, replacedFilepath string) (err error) {
+// replaceFile replaces the file at the path given with a file containing the
+// data given, so that the file is never partially written. The data is
+// written to a temporary file in the same directory, which is then renamed.
+// It returns false without touching the file if the file does not exist or
+// cannot be replaced by renaming a file, for the caller to write it in place.
+func replaceFile(path string, data []byte) (replaced bool, err error) {
+	// The file a symbolic link points to is replaced, not the symbolic link.
+	path, err = filepath.EvalSymlinks(path)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return false, nil
+	case err != nil:
+		return false, fmt.Errorf("resolving path: %w", err)
+	}
+
+	fileInfo, err := os.Stat(path)
+	if err != nil {
+		return false, fmt.Errorf("stating file: %w", err)
+	}
+
+	temporaryFile, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*.tmp")
+	switch {
+	case isRenameUnsupported(err):
+		return false, nil
+	case err != nil:
+		return false, fmt.Errorf("creating temporary file: %w", err)
+	}
+	temporaryPath := temporaryFile.Name()
+
+	err = writeTemporaryFile(temporaryFile, data, fileInfo.Mode().Perm())
+	if err != nil {
+		_ = os.Remove(temporaryPath)
+		return false, fmt.Errorf("writing temporary file: %w", err)
+	}
+
+	err = os.Rename(temporaryPath, path)
+	if err != nil {
+		_ = os.Remove(temporaryPath)
+		if isRenameUnsupported(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("renaming temporary file: %w", err)
+	}
+	return true, nil
+}
+
+// isRenameUnsupported returns true if the error means a file cannot be
+// replaced by renaming another file, although it may be writable in place.
+// This is the case of a bind mounted file, or of a file in a read only or
+// non writable directory.
+func isRenameUnsupported(err error) bool {
+	return errors.Is(err, fs.ErrPermission) || errors.Is(err, syscall.EROFS) ||
+		errors.Is(err, syscall.EBUSY) || errors.Is(err, syscall.EXDEV)
+}
+
+func writeTemporaryFile(temporaryFile *os.File, data []byte, perm fs.FileMode) (err error) {
 	defer func() {
 		closeErr := temporaryFile.Close()
 		if err == nil && closeErr != nil {
@@ -165,15 +208,9 @@ func writeTemporaryFile(temporaryFile *os.File, data []byte, replacedFilepath st
 		}
 	}()
 
-	replacedFileInfo, err := os.Stat(replacedFilepath)
-	switch {
-	case err == nil:
-		err = temporaryFile.Chmod(replacedFileInfo.Mode().Perm())
-		if err != nil {
-			return fmt.Errorf("setting file permissions: %w", err)
-		}
-	case !errors.Is(err, os.ErrNotExist):
-		return fmt.Errorf("stating replaced file: %w", err)
+	err = temporaryFile.Chmod(perm)
+	if err != nil {
+		return fmt.Errorf("setting file permissions: %w", err)
 	}
 
 	_, err = temporaryFile.Write(data)

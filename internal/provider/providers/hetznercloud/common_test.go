@@ -15,22 +15,22 @@ func Test_handleErrorResponse(t *testing.T) {
 	testCases := map[string]struct {
 		statusCode int
 		body       string
-		errMessage string
+		wantErr    string
 	}{
 		"error_with_code_and_message": {
 			statusCode: http.StatusUnauthorized,
 			body:       `{"error":{"code":"unauthorized","message":"invalid token"}}`,
-			errMessage: "HTTP status is not valid: 401: code: unauthorized: message: invalid token",
+			wantErr:    "HTTP status is not valid: 401: code: unauthorized: message: invalid token",
 		},
 		"error_with_details": {
 			statusCode: http.StatusUnprocessableEntity,
-			body:       `{"error":{"code":"invalid_input","message":"invalid input","details":"ttl is too low"}}`,
-			errMessage: "HTTP status is not valid: 422: code: invalid_input: message: invalid input: details: ttl is too low",
+			body:       `{"error":{"code":"invalid_input","message":"invalid input","details":{"fields":["ttl"]}}}`,
+			wantErr:    "HTTP status is not valid: 422: code: invalid_input: message: invalid input: details: map[fields:[ttl]]",
 		},
 		"body_not_json": {
 			statusCode: http.StatusBadGateway,
-			body:       "bad\ngateway",
-			errMessage: "HTTP status is not valid: 502: badgateway",
+			body:       "<html>\nBad Gateway\n</html>",
+			wantErr:    "HTTP status is not valid: 502: <html>Bad Gateway</html>",
 		},
 	}
 
@@ -45,7 +45,7 @@ func Test_handleErrorResponse(t *testing.T) {
 
 			err := handleErrorResponse(response)
 
-			assert.ErrorContains(t, err, testCase.errMessage)
+			assert.ErrorContains(t, err, testCase.wantErr)
 		})
 	}
 }

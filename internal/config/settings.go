@@ -1,7 +1,6 @@
 package config
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/qdm12/gosettings/reader"
@@ -56,11 +55,6 @@ func (c Config) Validate() (err error) {
 		if err != nil {
 			return fmt.Errorf("%s settings: %w", name, err)
 		}
-	}
-
-	backupEnabled := *c.Backup.Period != 0
-	if backupEnabled && *c.Backup.IncludeConfig && !c.Paths.configFileHasSettings() {
-		return errors.New("BACKUP_INCLUDE_CONFIG must be false when CONFIG is set and CONFIG_PERSIST is false")
 	}
 
 	return nil

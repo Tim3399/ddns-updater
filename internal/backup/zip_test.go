@@ -3,6 +3,7 @@ package backup
 import (
 	"archive/zip"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -15,32 +16,29 @@ func Test_zipFiles(t *testing.T) {
 	t.Parallel()
 
 	testCases := map[string]struct {
-		// files maps the name of each file to archive to its content.
+		// files maps the name of each file to create to its content.
 		files map[string]string
-		// archiveNames maps the name of each file to archive to its name in
-		// the archive. Names without a file on disk are still requested.
-		archiveNames map[string]string
-		// archived maps the name of each archived file to its content.
-		archived   map[string]string
-		errMessage string
+		// inputFileNames are the names of the files to zip.
+		inputFileNames []string
+		// zipped maps the name of each zipped file to its content.
+		zipped map[string]string
+		errIs  error
 	}{
-		"files_archived_under_their_archive_names": {
+		"files_zipped": {
 			files: map[string]string{
-				"updates.json": `{"records":[]}`,
-				"custom.json":  `{"settings":[]}`,
-			},
-			archiveNames: map[string]string{
-				"updates.json": "updates.json",
-				"custom.json":  "config.json",
-			},
-			archived: map[string]string{
-				"updates.json": `{"records":[]}`,
 				"config.json":  `{"settings":[]}`,
+				"updates.json": `{"records":[]}`,
+			},
+			inputFileNames: []string{"config.json", "updates.json"},
+			zipped: map[string]string{
+				"config.json":  `{"settings":[]}`,
+				"updates.json": `{"records":[]}`,
 			},
 		},
-		"missing_file": {
-			archiveNames: map[string]string{"updates.json": "updates.json"},
-			errMessage:   "no such file or directory",
+		"zip_file_removed_on_missing_file": {
+			files:          map[string]string{"config.json": `{"settings":[]}`},
+			inputFileNames: []string{"config.json", "updates.json"},
+			errIs:          fs.ErrNotExist,
 		},
 	}
 
@@ -53,26 +51,24 @@ func Test_zipFiles(t *testing.T) {
 				err := os.WriteFile(filepath.Join(directory, fileName), []byte(content), 0o600)
 				require.NoError(t, err)
 			}
-			files := make([]archiveFile, 0, len(testCase.archiveNames))
-			for fileName, archiveName := range testCase.archiveNames {
-				files = append(files, archiveFile{
-					path: filepath.Join(directory, fileName),
-					name: archiveName,
-				})
+			inputFilepaths := make([]string, len(testCase.inputFileNames))
+			for i, fileName := range testCase.inputFileNames {
+				inputFilepaths[i] = filepath.Join(directory, fileName)
 			}
 			outputFilepath := filepath.Join(directory, "backup.zip")
 
-			err := zipFiles(outputFilepath, files...)
+			err := zipFiles(outputFilepath, inputFilepaths...)
 
-			if testCase.errMessage != "" {
-				assert.ErrorContains(t, err, testCase.errMessage)
+			if testCase.errIs != nil {
+				require.ErrorIs(t, err, testCase.errIs)
+				assert.NoFileExists(t, outputFilepath)
 				return
 			}
 			require.NoError(t, err)
 			reader, err := zip.OpenReader(outputFilepath)
 			require.NoError(t, err)
 			defer reader.Close()
-			archived := make(map[string]string, len(reader.File))
+			zipped := make(map[string]string, len(reader.File))
 			for _, file := range reader.File {
 				fileReader, err := file.Open()
 				require.NoError(t, err)
@@ -80,9 +76,9 @@ func Test_zipFiles(t *testing.T) {
 				require.NoError(t, err)
 				err = fileReader.Close()
 				require.NoError(t, err)
-				archived[file.Name] = string(content)
+				zipped[file.Name] = string(content)
 			}
-			assert.Equal(t, testCase.archived, archived)
+			assert.Equal(t, testCase.zipped, zipped)
 		})
 	}
 }
