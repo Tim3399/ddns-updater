@@ -3,6 +3,7 @@ package config
 import (
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -42,10 +43,75 @@ func Test_Settings_String(t *testing.T) {
 ├── Paths
 |   ├── Data directory: ./data
 |   ├── Config file: ` + filepath.Join("data", "config.json") + `
+|   ├── Persist environment config: true
 |   └── Umask: system default
 ├── Backup: disabled
 └── Logger
     ├── Level: INFO
     └── Caller: hidden`
 	assert.Equal(t, expected, s)
+}
+
+func Test_Config_Validate(t *testing.T) {
+	t.Parallel()
+
+	testCases := map[string]struct {
+		config     Config
+		errMessage string
+	}{
+		"default_settings": {},
+		"config_not_persisted_without_backup": {
+			config: Config{Paths: Paths{
+				ConfigPersist:     new(false),
+				environmentConfig: true,
+			}},
+		},
+		"config_not_persisted_with_backup_without_config": {
+			config: Config{
+				Paths: Paths{
+					ConfigPersist:     new(false),
+					environmentConfig: true,
+				},
+				Backup: Backup{
+					Period:        new(time.Hour),
+					IncludeConfig: new(false),
+				},
+			},
+		},
+		"config_not_persisted_with_backup_with_config": {
+			config: Config{
+				Paths: Paths{
+					ConfigPersist:     new(false),
+					environmentConfig: true,
+				},
+				Backup: Backup{Period: new(time.Hour)},
+			},
+			errMessage: "BACKUP_INCLUDE_CONFIG must be false when CONFIG is set and CONFIG_PERSIST is false",
+		},
+		"config_persisted_with_backup_with_config": {
+			config: Config{
+				Paths: Paths{
+					ConfigPersist:     new(true),
+					environmentConfig: true,
+				},
+				Backup: Backup{Period: new(time.Hour)},
+			},
+		},
+	}
+
+	for name, testCase := range testCases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			testCase.config.SetDefaults()
+
+			err := testCase.config.Validate()
+
+			if testCase.errMessage != "" {
+				assert.ErrorContains(t, err, testCase.errMessage)
+				return
+			}
+			assert.NoError(t, err)
+		})
+	}
 }
