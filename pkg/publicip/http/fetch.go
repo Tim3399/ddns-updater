@@ -34,11 +34,18 @@ func fetch(ctx context.Context, client *http.Client, url string,
 	case http.StatusForbidden, http.StatusTooManyRequests:
 		return netip.Addr{}, fmt.Errorf("%w: %d (%s)", errBanned,
 			response.StatusCode, bodyToSingleLine(response.Body))
+	default:
+		return netip.Addr{}, fmt.Errorf("unexpected HTTP status: %d (%s)",
+			response.StatusCode, bodyToSingleLine(response.Body))
 	}
 
-	b, err := io.ReadAll(response.Body)
+	const maxBodyBytes = 64 * 1024
+	b, err := io.ReadAll(io.LimitReader(response.Body, maxBodyBytes+1))
 	if err != nil {
 		return netip.Addr{}, err
+	}
+	if len(b) > maxBodyBytes {
+		return netip.Addr{}, fmt.Errorf("response body too large: limit is %d bytes", maxBodyBytes)
 	}
 
 	err = response.Body.Close()
@@ -89,7 +96,8 @@ func fetch(ctx context.Context, client *http.Client, url string,
 }
 
 func bodyToSingleLine(body io.Reader) (s string) {
-	b, err := io.ReadAll(body)
+	const maxBodyBytes = 1024
+	b, err := io.ReadAll(io.LimitReader(body, maxBodyBytes))
 	if err != nil {
 		return ""
 	}
