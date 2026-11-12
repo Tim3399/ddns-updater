@@ -24,9 +24,9 @@ type Paths struct {
 	environmentConfig bool
 }
 
-// configFileHasSettings reports whether the config file holds the provider
-// settings. This is always the case when the settings are read from the file,
-// and only the case with CONFIG_PERSIST enabled when they come from CONFIG.
+// configFileHasSettings reports whether the configuration file holds the
+// configuration. It does not when the configuration is given with CONFIG
+// and is not persisted to the configuration file.
 func (p Paths) configFileHasSettings() bool {
 	return !p.environmentConfig || *p.ConfigPersist
 }

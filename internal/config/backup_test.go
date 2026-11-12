@@ -96,8 +96,7 @@ func Test_Backup_String(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			const includeConfig = true
-			testCase.backup.setDefaults(includeConfig)
+			testCase.backup.setDefaults()
 
 			summary := testCase.backup.String()
 

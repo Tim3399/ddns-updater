@@ -17,11 +17,11 @@ type Backup struct {
 	IncludeConfig *bool
 }
 
-func (b *Backup) setDefaults(includeConfig bool) {
+func (b *Backup) setDefaults() {
 	b.Period = gosettings.DefaultPointer(b.Period, 0)
 	b.Directory = gosettings.DefaultPointer(b.Directory, "./data")
 	b.Keep = gosettings.DefaultPointer(b.Keep, 0)
-	b.IncludeConfig = gosettings.DefaultPointer(b.IncludeConfig, includeConfig)
+	b.IncludeConfig = gosettings.DefaultPointer(b.IncludeConfig, true)
 }
 
 func (b Backup) Validate() (err error) {

@@ -315,7 +315,7 @@ Note that:
 | `BACKUP_PERIOD` | `0` | Set to a period (i.e. `72h15m`) to enable zip backups of the data file updates.json and of the JSON configuration file in a zip file |
 | `BACKUP_DIRECTORY` | `/updater/data` | Directory to write backup zip files to if `BACKUP_PERIOD` is not `0`. |
 | `BACKUP_KEEP` | `0` | Number of backup zip files to keep, removing the oldest ones. `0` keeps all of them. Files which are not readable backups are neither counted nor removed. |
-| `BACKUP_INCLUDE_CONFIG` | `true` | Set to `false` to not include the JSON configuration file in backups, as config.json. It defaults to `false` if `CONFIG` is set and `CONFIG_PERSIST` is `false`. |
+| `BACKUP_INCLUDE_CONFIG` | `true` | Set to `false` to not include the JSON configuration file in backups, as config.json. It must be `false` if backups are enabled, `CONFIG` is set and `CONFIG_PERSIST` is `false`. |
 | `RESOLVER_ADDRESS` | Your network DNS | A plaintext DNS address to use to resolve your domain names defined in your settings only. For example it can be `1.1.1.1:53`. This is useful for split dns, see [#389](https://github.com/qdm12/ddns-updater/issues/389) |
 | `LOG_LEVEL` | `info` | Level of logging, `debug`, `info`, `warning` or `error` |
 | `LOG_CALLER` | `hidden` | Show caller per log line, `hidden` or `short` |

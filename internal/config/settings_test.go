@@ -3,6 +3,7 @@ package config
 import (
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -51,53 +52,6 @@ func Test_Settings_String(t *testing.T) {
 	assert.Equal(t, expected, s)
 }
 
-func Test_Config_SetDefaults(t *testing.T) {
-	t.Parallel()
-
-	testCases := map[string]struct {
-		config        Config
-		includeConfig bool
-	}{
-		"config_from_file": {
-			includeConfig: true,
-		},
-		"config_from_environment_persisted": {
-			config: Config{Paths: Paths{
-				ConfigPersist:     new(true),
-				environmentConfig: true,
-			}},
-			includeConfig: true,
-		},
-		"config_from_environment_not_persisted": {
-			config: Config{Paths: Paths{
-				ConfigPersist:     new(false),
-				environmentConfig: true,
-			}},
-			includeConfig: false,
-		},
-		"include_config_already_set": {
-			config: Config{
-				Paths: Paths{
-					ConfigPersist:     new(false),
-					environmentConfig: true,
-				},
-				Backup: Backup{IncludeConfig: new(true)},
-			},
-			includeConfig: true,
-		},
-	}
-
-	for name, testCase := range testCases {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
-			testCase.config.SetDefaults()
-
-			assert.Equal(t, testCase.includeConfig, *testCase.config.Backup.IncludeConfig)
-		})
-	}
-}
-
 func Test_Config_Validate(t *testing.T) {
 	t.Parallel()
 
@@ -106,21 +60,42 @@ func Test_Config_Validate(t *testing.T) {
 		errMessage string
 	}{
 		"default_settings": {},
-		"config_not_persisted_and_not_backed_up": {
+		"config_not_persisted_without_backup": {
 			config: Config{Paths: Paths{
 				ConfigPersist:     new(false),
 				environmentConfig: true,
 			}},
 		},
-		"config_not_persisted_and_backed_up": {
+		"config_not_persisted_with_backup_without_config": {
 			config: Config{
 				Paths: Paths{
 					ConfigPersist:     new(false),
 					environmentConfig: true,
 				},
-				Backup: Backup{IncludeConfig: new(true)},
+				Backup: Backup{
+					Period:        new(time.Hour),
+					IncludeConfig: new(false),
+				},
 			},
-			errMessage: "BACKUP_INCLUDE_CONFIG cannot be enabled when CONFIG is set and CONFIG_PERSIST is false",
+		},
+		"config_not_persisted_with_backup_with_config": {
+			config: Config{
+				Paths: Paths{
+					ConfigPersist:     new(false),
+					environmentConfig: true,
+				},
+				Backup: Backup{Period: new(time.Hour)},
+			},
+			errMessage: "BACKUP_INCLUDE_CONFIG must be false when CONFIG is set and CONFIG_PERSIST is false",
+		},
+		"config_persisted_with_backup_with_config": {
+			config: Config{
+				Paths: Paths{
+					ConfigPersist:     new(true),
+					environmentConfig: true,
+				},
+				Backup: Backup{Period: new(time.Hour)},
+			},
 		},
 	}
 
