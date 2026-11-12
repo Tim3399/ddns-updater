@@ -71,7 +71,7 @@ func (r *Reader) getProvidersFromFile(filePath string) (
 }
 
 // getProvidersFromEnv obtain the update settings from the environment variable CONFIG.
-// If the settings are valid, they are written to the filePath.
+// If the settings are valid and persistence is enabled, they are written to filePath.
 func (r *Reader) getProvidersFromEnv(filePath string) (
 	providers []provider.Provider, warnings []string, err error,
 ) {
@@ -87,6 +87,10 @@ func (r *Reader) getProvidersFromEnv(filePath string) (
 	providers, warnings, err = extractAllSettings(b)
 	if err != nil {
 		return providers, warnings, fmt.Errorf("configuration given: %w", err)
+	}
+
+	if !r.persistEnvironmentConfig {
+		return providers, warnings, nil
 	}
 
 	buffer := bytes.NewBuffer(nil)

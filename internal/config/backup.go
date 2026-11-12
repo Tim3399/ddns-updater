@@ -13,12 +13,15 @@ type Backup struct {
 	Directory *string
 	// Keep is the number of backups to keep, where zero keeps all backups.
 	Keep *uint
+	// IncludeConfig is true if the configuration file is included in backups.
+	IncludeConfig *bool
 }
 
-func (b *Backup) setDefaults() {
+func (b *Backup) setDefaults(includeConfig bool) {
 	b.Period = gosettings.DefaultPointer(b.Period, 0)
 	b.Directory = gosettings.DefaultPointer(b.Directory, "./data")
 	b.Keep = gosettings.DefaultPointer(b.Keep, 0)
+	b.IncludeConfig = gosettings.DefaultPointer(b.IncludeConfig, includeConfig)
 }
 
 func (b Backup) Validate() (err error) {
@@ -41,6 +44,7 @@ func (b Backup) toLinesNode() *gotree.Node {
 	} else {
 		node.Appendf("Keep: %d backups", *b.Keep)
 	}
+	node.Appendf("Include config: %t", *b.IncludeConfig)
 	return node
 }
 
@@ -53,5 +57,10 @@ func (b *Backup) read(reader *reader.Reader) (err error) {
 	b.Directory = reader.Get("BACKUP_DIRECTORY")
 
 	b.Keep, err = reader.UintPtr("BACKUP_KEEP")
+	if err != nil {
+		return err
+	}
+
+	b.IncludeConfig, err = reader.BoolPtr("BACKUP_INCLUDE_CONFIG")
 	return err
 }
