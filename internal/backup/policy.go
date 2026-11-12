@@ -14,8 +14,8 @@ import (
 // pruneBackups deletes the oldest backups in outputDir so that at most
 // keep backups remain. Files which are not readable backup archives are
 // neither counted nor deleted. A keep value of zero keeps all backups.
-func pruneBackups(outputDir string, keep int) error {
-	if keep <= 0 {
+func pruneBackups(outputDir string, keep uint) error {
+	if keep == 0 {
 		return nil
 	}
 
@@ -46,14 +46,14 @@ func pruneBackups(outputDir string, keep int) error {
 		backups = append(backups, backup{path: path, modTime: info.ModTime()})
 	}
 
-	if len(backups) <= keep {
+	if uint(len(backups)) <= keep {
 		return nil
 	}
 
 	sort.SliceStable(backups, func(i, j int) bool {
 		return backups[i].modTime.Before(backups[j].modTime)
 	})
-	for _, backup := range backups[:len(backups)-keep] {
+	for _, backup := range backups[:uint(len(backups))-keep] {
 		err = os.Remove(backup.path)
 		if err != nil {
 			return err

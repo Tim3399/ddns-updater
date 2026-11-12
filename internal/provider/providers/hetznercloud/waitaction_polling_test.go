@@ -9,7 +9,6 @@ import (
 	"testing/synctest"
 	"time"
 
-	providererrors "github.com/qdm12/ddns-updater/internal/provider/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -35,14 +34,14 @@ func TestWaitActionAfterMultipleRunningResponses(t *testing.T) {
 
 	testCases := map[string]struct {
 		finalResponse string
-		wantErr       error
+		wantErr       string
 	}{
 		"eventual success": {
 			finalResponse: `{"action":{"id":42,"status":"success"}}`,
 		},
 		"eventual action error": {
 			finalResponse: `{"action":{"id":42,"status":"error","error":{"code":"failed","message":"boom"}}}`,
-			wantErr:       providererrors.ErrUnsuccessful,
+			wantErr:       "unsuccessful result: action id 42 failed",
 		},
 	}
 	for name, testCase := range testCases {
@@ -72,8 +71,8 @@ func TestWaitActionAfterMultipleRunningResponses(t *testing.T) {
 
 				err := provider.waitAction(t.Context(), client, 42)
 
-				if testCase.wantErr != nil {
-					require.ErrorIs(t, err, testCase.wantErr)
+				if testCase.wantErr != "" {
+					require.ErrorContains(t, err, testCase.wantErr)
 					assert.ErrorContains(t, err, "boom")
 				} else {
 					require.NoError(t, err)

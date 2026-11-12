@@ -26,6 +26,7 @@ func Test_fetch(t *testing.T) {
 		ctx         context.Context
 		url         string
 		version     ipversion.IPVersion
+		httpStatus  int
 		httpContent []byte
 		httpErr     error
 		publicIP    netip.Addr
@@ -43,6 +44,29 @@ func Test_fetch(t *testing.T) {
 			version: ipversion.IP4or6,
 			httpErr: errDummy,
 			err:     errors.New(`Get "https://opendns.com/ip": dummy`),
+		},
+		"unexpected status": {
+			ctx:         context.Background(),
+			url:         "https://opendns.com/ip",
+			version:     ipversion.IP4or6,
+			httpStatus:  http.StatusInternalServerError,
+			httpContent: []byte(`1.67.201.251`),
+			err:         errors.New("unexpected HTTP status: 500 (1.67.201.251)"),
+		},
+		"too many requests": {
+			ctx:         context.Background(),
+			url:         "https://opendns.com/ip",
+			version:     ipversion.IP4or6,
+			httpStatus:  http.StatusTooManyRequests,
+			httpContent: []byte(`slow down`),
+			err:         errors.New("we got banned: 429 (slow down)"),
+		},
+		"response too large": {
+			ctx:         context.Background(),
+			url:         "https://opendns.com/ip",
+			version:     ipversion.IP4or6,
+			httpContent: bytes.Repeat([]byte("x"), 64*1024+1),
+			err:         errors.New("response body too large: limit is 65536 bytes"),
 		},
 		"empty response": {
 			ctx:     context.Background(),
@@ -154,8 +178,12 @@ func Test_fetch(t *testing.T) {
 					} else if tc.httpErr != nil {
 						return nil, tc.httpErr
 					}
+					httpStatus := http.StatusOK
+					if tc.httpStatus != 0 {
+						httpStatus = tc.httpStatus
+					}
 					return &http.Response{
-						StatusCode: http.StatusOK,
+						StatusCode: httpStatus,
 						Body:       io.NopCloser(bytes.NewReader(tc.httpContent)),
 					}, nil
 				}),

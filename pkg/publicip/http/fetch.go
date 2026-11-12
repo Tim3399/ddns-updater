@@ -13,18 +13,7 @@ import (
 	"github.com/qdm12/ddns-updater/pkg/publicip/ipversion"
 )
 
-var (
-	ErrNoIPFound        = errors.New("no IP address found")
-	ErrTooManyIPs       = errors.New("too many IP addresses")
-	ErrBanned           = errors.New("we got banned")
-	ErrHTTPStatus       = errors.New("unexpected HTTP status")
-	ErrResponseTooLarge = errors.New("response body too large")
-)
-
-const (
-	maxPublicIPResponseBytes int64 = 64 * 1024
-	maxErrorResponseBytes    int64 = 1024
-)
+var errBanned = errors.New("we got banned")
 
 func fetch(ctx context.Context, client *http.Client, url string,
 	version ipversion.IPVersion,
@@ -43,18 +32,25 @@ func fetch(ctx context.Context, client *http.Client, url string,
 	switch response.StatusCode {
 	case http.StatusOK:
 	case http.StatusForbidden, http.StatusTooManyRequests:
-		return netip.Addr{}, makeStatusError(ErrBanned, response)
+		return netip.Addr{}, fmt.Errorf("%w: %d (%s)", errBanned,
+			response.StatusCode, bodyToSingleLine(response.Body))
 	default:
-		return netip.Addr{}, makeStatusError(ErrHTTPStatus, response)
+		return netip.Addr{}, fmt.Errorf("unexpected HTTP status: %d (%s)",
+			response.StatusCode, bodyToSingleLine(response.Body))
 	}
 
-	b, err := io.ReadAll(io.LimitReader(response.Body, maxPublicIPResponseBytes+1))
+	const maxBodyBytes = 64 * 1024
+	b, err := io.ReadAll(io.LimitReader(response.Body, maxBodyBytes+1))
 	if err != nil {
 		return netip.Addr{}, err
 	}
-	if int64(len(b)) > maxPublicIPResponseBytes {
-		return netip.Addr{}, fmt.Errorf("%w: limit is %d bytes",
-			ErrResponseTooLarge, maxPublicIPResponseBytes)
+	if len(b) > maxBodyBytes {
+		return netip.Addr{}, fmt.Errorf("response body too large: limit is %d bytes", maxBodyBytes)
+	}
+
+	err = response.Body.Close()
+	if err != nil {
+		return netip.Addr{}, err
 	}
 
 	s := string(b)
@@ -70,48 +66,38 @@ func fetch(ctx context.Context, client *http.Client, url string,
 		case len(ipv6) == 1:
 			return ipv6[0], nil
 		case len(ipv4) > 1:
-			return netip.Addr{}, fmt.Errorf("%w: found %d IPv4 addresses instead of 1",
-				ErrTooManyIPs, len(ipv4))
+			return netip.Addr{}, fmt.Errorf("too many IP addresses: found %d IPv4 addresses instead of 1", len(ipv4))
 		case len(ipv6) > 1:
-			return netip.Addr{}, fmt.Errorf("%w: found %d IPv6 addresses instead of 1",
-				ErrTooManyIPs, len(ipv6))
+			return netip.Addr{}, fmt.Errorf("too many IP addresses: found %d IPv6 addresses instead of 1", len(ipv6))
 		default:
-			return netip.Addr{}, fmt.Errorf("%w: from %q", ErrNoIPFound, url)
+			return netip.Addr{}, fmt.Errorf("no IP address found: from %q", url)
 		}
 	case ipversion.IP4:
 		switch len(ipv4) {
 		case 0:
-			return netip.Addr{}, fmt.Errorf("%w: from %q for version %s", ErrNoIPFound, url, version)
+			return netip.Addr{}, fmt.Errorf("no IP address found: from %q for version %s", url, version)
 		case 1:
 			return ipv4[0], nil
 		default:
-			return netip.Addr{}, fmt.Errorf("%w: found %d IPv4 addresses instead of 1",
-				ErrTooManyIPs, len(ipv4))
+			return netip.Addr{}, fmt.Errorf("too many IP addresses: found %d IPv4 addresses instead of 1", len(ipv4))
 		}
 	case ipversion.IP6:
 		switch len(ipv6) {
 		case 0:
-			return netip.Addr{}, fmt.Errorf("%w: from %q for version %s", ErrNoIPFound, url, version)
+			return netip.Addr{}, fmt.Errorf("no IP address found: from %q for version %s", url, version)
 		case 1:
 			return ipv6[0], nil
 		default:
-			return netip.Addr{}, fmt.Errorf("%w: found %d IPv6 addresses instead of 1",
-				ErrTooManyIPs, len(ipv6))
+			return netip.Addr{}, fmt.Errorf("too many IP addresses: found %d IPv6 addresses instead of 1", len(ipv6))
 		}
 	default:
 		panic(fmt.Sprintf("IP version %q is not supported", version))
 	}
 }
 
-// makeStatusError wraps baseErr with the response status code and
-// the beginning of the response body.
-func makeStatusError(baseErr error, response *http.Response) error {
-	body := bodyToSingleLine(io.LimitReader(response.Body, maxErrorResponseBytes))
-	return fmt.Errorf("%w: %d (%s)", baseErr, response.StatusCode, body)
-}
-
 func bodyToSingleLine(body io.Reader) (s string) {
-	b, err := io.ReadAll(body)
+	const maxBodyBytes = 1024
+	b, err := io.ReadAll(io.LimitReader(body, maxBodyBytes))
 	if err != nil {
 		return ""
 	}

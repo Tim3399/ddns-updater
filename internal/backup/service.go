@@ -16,7 +16,7 @@ const (
 type Options struct {
 	ConfigFilepath string
 	IncludeConfig  bool
-	Keep           int
+	Keep           uint
 }
 
 type Service struct {

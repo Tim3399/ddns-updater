@@ -7,12 +7,12 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/qdm12/ddns-updater/internal/provider/errors"
+	ddnserrors "github.com/qdm12/ddns-updater/internal/provider/errors"
 )
 
 func (p *Provider) waitAction(ctx context.Context, client *http.Client, id uint64) (err error) {
 	if id == 0 {
-		return fmt.Errorf("%w: action id is zero", errors.ErrReceivedNoResult)
+		return fmt.Errorf("%w: action id is zero", ddnserrors.ErrReceivedNoResult)
 	}
 
 	// Zone actions can take several seconds after the DNS records have changed.
@@ -45,15 +45,13 @@ func (p *Provider) waitAction(ctx context.Context, client *http.Client, id uint6
 			case <-timer.C:
 			}
 		case "error":
-			err = fmt.Errorf("%w: action id %d failed",
-				errors.ErrUnsuccessful, action.ID)
+			err = fmt.Errorf("unsuccessful result: action id %d failed", action.ID)
 			if action.Error != nil {
 				err = fmt.Errorf("%w: %v", err, action.Error)
 			}
 			return err
 		default:
-			return fmt.Errorf("%w: unknown action status %q for action id %d",
-				errors.ErrDNSServerSide, action.Status, action.ID)
+			return fmt.Errorf("server side DNS error: unknown action status %q for action id %d", action.Status, action.ID)
 		}
 	}
 }

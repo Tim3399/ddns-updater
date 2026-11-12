@@ -1,8 +1,6 @@
 package config
 
 import (
-	"errors"
-	"fmt"
 	"time"
 
 	"github.com/qdm12/gosettings"
@@ -10,13 +8,11 @@ import (
 	"github.com/qdm12/gotree"
 )
 
-var ErrBackupKeepNegative = errors.New("backup keep count is negative")
-
 type Backup struct {
 	Period        *time.Duration
 	Directory     *string
 	IncludeConfig *bool
-	Keep          *int
+	Keep          *uint
 }
 
 func (b *Backup) setDefaults(includeConfig bool) {
@@ -27,9 +23,6 @@ func (b *Backup) setDefaults(includeConfig bool) {
 }
 
 func (b Backup) Validate() (err error) {
-	if *b.Keep < 0 {
-		return fmt.Errorf("%w: %d", ErrBackupKeepNegative, *b.Keep)
-	}
 	return nil
 }
 
@@ -64,6 +57,6 @@ func (b *Backup) read(reader *reader.Reader) (err error) {
 	if err != nil {
 		return err
 	}
-	b.Keep, err = reader.IntPtr("BACKUP_KEEP")
+	b.Keep, err = reader.UintPtr("BACKUP_KEEP")
 	return err
 }

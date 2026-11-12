@@ -85,11 +85,14 @@ func TestConfigPolicyDefaults(t *testing.T) {
 	}
 }
 
-func TestBackupValidateRejectsNegativeKeep(t *testing.T) {
-	t.Parallel()
+func TestBackupReadRejectsNegativeKeep(t *testing.T) {
+	t.Setenv("BACKUP_PERIOD", "")
+	t.Setenv("BACKUP_DIRECTORY", "")
+	t.Setenv("BACKUP_INCLUDE_CONFIG", "")
+	t.Setenv("BACKUP_KEEP", "-1")
 
-	backup := Backup{Keep: new(-1)}
-	backup.setDefaults(true)
-	err := backup.Validate()
-	assert.ErrorIs(t, err, ErrBackupKeepNegative)
+	var backup Backup
+	err := backup.read(settingsreader.New(settingsreader.Settings{}))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "BACKUP_KEEP")
 }
